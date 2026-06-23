@@ -21,6 +21,7 @@ export function App() {
   const [configOpen, setConfigOpen] = useState(false)
   const [reqMatchOpen, setReqMatchOpen] = useState(false)
   const [logoError, setLogoError] = useState(false)
+  const [editingMatch, setEditingMatch] = useState<{ id: string; bola: number; score: string } | null>(null)
 
   const isHistorical = selectedDate !== TODAY
 
@@ -103,6 +104,24 @@ export function App() {
         four.includes(p.id) ? { ...p, status: 'Playing' as PlayerStatus } : p
       ),
     })
+  }
+
+  function editMatch(matchId: string, shuttlesUsed: number, score: string) {
+    const match = state.matches.find(m => m.id === matchId)!
+    const oldCost = Math.round(((match.shuttlesUsed ?? 0) * state.shuttlePrice) / 4)
+    const newCost = Math.round((shuttlesUsed * state.shuttlePrice) / 4)
+    const delta = newCost - oldCost
+    const playerIds = new Set([...match.team1, ...match.team2])
+    mut.mutate({
+      ...state,
+      matches: state.matches.map(m =>
+        m.id === matchId ? { ...m, shuttlesUsed, score } : m
+      ),
+      players: delta === 0 ? state.players : state.players.map(p =>
+        playerIds.has(p.id) ? { ...p, totalCost: p.totalCost + delta } : p
+      ),
+    })
+    setEditingMatch(null)
   }
 
   function endMatch(matchId: string, shuttlesUsed: number, score: string) {
@@ -274,12 +293,49 @@ export function App() {
                       <div key={m.id} className="mh-card">
                         <div className="mh-card-header">
                           <span className="mh-num">#{m.matchNumber}</span>
-                          <span className="mh-bola-tag">{m.shuttlesUsed ?? 0} bola</span>
+                          {editingMatch?.id === m.id ? (
+                            <input
+                              type="number" min={0}
+                              value={editingMatch.bola}
+                              onChange={e => setEditingMatch(em => em && ({ ...em, bola: +e.target.value }))}
+                              style={{ width: 52, fontSize: 11, background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 4, padding: '1px 4px' }}
+                            />
+                          ) : (
+                            <span
+                              className="mh-bola-tag"
+                              style={!isHistorical ? { cursor: 'pointer' } : undefined}
+                              onClick={() => !isHistorical && setEditingMatch({ id: m.id, bola: m.shuttlesUsed ?? 0, score: m.score ?? '' })}
+                            >
+                              {m.shuttlesUsed ?? 0} bola{!isHistorical && ' ✏'}
+                            </span>
+                          )}
                         </div>
                         <div className="mh-team">{n(m.team1[0])} · {n(m.team1[1])}</div>
                         <div className="mh-vs">vs</div>
                         <div className="mh-team">{n(m.team2[0])} · {n(m.team2[1])}</div>
-                        {m.score && <div className="mh-score">{m.score}</div>}
+                        {editingMatch?.id === m.id ? (
+                          <>
+                            <input
+                              value={editingMatch.score}
+                              placeholder="Skor (mis: 21-15)"
+                              onChange={e => setEditingMatch(em => em && ({ ...em, score: e.target.value }))}
+                              onKeyDown={e => e.key === 'Enter' && editMatch(m.id, editingMatch.bola, editingMatch.score)}
+                              style={{ fontSize: 11, width: '100%', marginTop: 4, background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 4, padding: '2px 6px', boxSizing: 'border-box' }}
+                            />
+                            <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
+                              <button className="btn btn-primary btn-sm" style={{ flex: 1, fontSize: 10, padding: '2px 6px' }}
+                                onClick={() => editMatch(m.id, editingMatch.bola, editingMatch.score)}>
+                                Simpan
+                              </button>
+                              <button className="btn btn-ghost btn-sm" style={{ fontSize: 10, padding: '2px 6px' }}
+                                onClick={() => setEditingMatch(null)}>
+                                Batal
+                              </button>
+                            </div>
+                          </>
+                        ) : (
+                          m.score && <div className="mh-score">{m.score}</div>
+                        )}
                       </div>
                     )
                   })}

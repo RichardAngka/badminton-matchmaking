@@ -20,16 +20,18 @@ export async function fetchRemoteState(date: string): Promise<AppState | null> {
     .select('state')
     .eq('session_date', date)
     .maybeSingle()
-  if (error || !data) return null
+  if (error) { console.error('[supabase] fetch failed:', error.message); return null }
+  if (!data) return null
   return data.state as AppState
 }
 
 export async function upsertRemoteState(date: string, state: AppState): Promise<void> {
   if (!supabase) return
-  await supabase.from('sessions').upsert(
+  const { error } = await supabase.from('sessions').upsert(
     { session_date: date, state, updated_at: new Date().toISOString() },
     { onConflict: 'session_date' },
   )
+  if (error) console.error('[supabase] upsert failed:', error.message)
 }
 
 export async function listRemoteSessions(): Promise<SessionMeta[]> {
