@@ -4,7 +4,7 @@ import { fetchRemoteState, upsertRemoteState } from './supabase'
 const KEY = 'pbsor-v1'
 
 export const DEFAULT_STATE: AppState = {
-  sessionDate: new Date().toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+  sessionDate: new Date().toLocaleDateString('en-CA'),
   shuttlePrice: 14000,
   targetPlayers: 36,
   timeSlots: [
