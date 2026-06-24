@@ -42,7 +42,7 @@ export function PlayerPanel({ open, onClose, state, onUpdate }: Props) {
       .sort((a, b) => a - b)
     // ponytail: interpolate between 2nd and last waiter — truly random, never steals #1
     const restingSince = restTimes.length >= 2
-      ? restTimes[1] + Math.random() * (restTimes.at(-1)! - restTimes[1])
+      ? restTimes[1] + Math.random() * (restTimes[restTimes.length - 1] - restTimes[1])
       : now
     const player: Player = {
       id: crypto.randomUUID(),
