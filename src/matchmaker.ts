@@ -25,6 +25,7 @@ const pairKey = (a: Player, b: Player) => [a.id, b.id].sort().join("|");
 export function findBestFour(
   pool: Player[],
   pastPairs: Set<string> = new Set(),
+  pastOpponents: Set<string> = new Set(),
 ): [Player, Player, Player, Player] | null {
   const sorted = [...pool].sort(
     (a, b) => (a.restingSince ?? 0) - (b.restingSince ?? 0),
@@ -60,6 +61,11 @@ export function findBestFour(
             let score = baseCost;
             if (pastPairs.has(pairKey(a, b))) score += 2;
             if (pastPairs.has(pairKey(c, d))) score += 2;
+            // ponytail: +1 per cross pair seen before; 4 cross pairs max +4, same ceiling as partner repeat
+            if (pastOpponents.has(pairKey(a, c))) score += 1;
+            if (pastOpponents.has(pairKey(a, d))) score += 1;
+            if (pastOpponents.has(pairKey(b, c))) score += 1;
+            if (pastOpponents.has(pairKey(b, d))) score += 1;
             score += fCount === 4 ? 0 : 1;
 
             if (score < bestScore) {

@@ -64,7 +64,11 @@ export function App() {
         [...m.team1].sort().join('|'),
         [...m.team2].sort().join('|'),
       ]))
-      const four = findBestFour(waiting, pastPairs)
+      const pastOpponents = new Set(next.matches.flatMap(m => {
+        const [a, b] = m.team1, [c, d] = m.team2
+        return [[a,c],[a,d],[b,c],[b,d]].map(p => p.sort().join('|'))
+      }))
+      const four = findBestFour(waiting, pastPairs, pastOpponents)
       if (!four) break
       const matchNum = next.matchCounter + 1
       next = {
