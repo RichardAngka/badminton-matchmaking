@@ -25,7 +25,7 @@ export function App() {
   const [editingMatch, setEditingMatch] = useState<{ id: string; bola: number; scoreL: string; scoreR: string } | null>(null)
   const [ledgerOpen, setLedgerOpen] = useState(false)
 
-  const isHistorical = selectedDate !== TODAY
+  const isHistorical = false // ponytail: was selectedDate !== TODAY, restore to re-lock past dates
 
   // Main state query — keyed by date so switching sessions re-fetches cleanly
   const { data: state = DEFAULT_STATE } = useQuery({
