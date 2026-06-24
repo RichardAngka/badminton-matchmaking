@@ -116,12 +116,11 @@ export function CourtCard({ courtId, match, players, upcoming, onEndMatch, onEdi
               <input
                 ref={refShuttles}
                 className="shuttle-input"
-                type="number" inputMode="numeric" min="0"
+                type="text" inputMode="numeric" pattern="[0-9]*" maxLength={2}
                 placeholder="Bola"
                 value={shuttles}
-                onChange={e => setShuttles(e.target.value)}
+                onChange={e => { const v = e.target.value.replace(/\D/g, ''); setShuttles(v); if (v.length === 2) refScoreL.current?.focus() }}
                 onKeyDown={e => e.key === 'Enter' && refScoreL.current?.focus()}
-                onBlur={() => { if (shuttles !== '' && scoreL === '') refScoreL.current?.focus() }}
               />
               <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 <input
