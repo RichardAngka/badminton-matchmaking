@@ -435,7 +435,7 @@ export function App() {
               <div className="match-history-grid">
                 {[...state.matches]
                   .filter(m => m.endTime)
-                  .sort((a, b) => a.matchNumber - b.matchNumber)
+                  .sort((a, b) => b.matchNumber - a.matchNumber)
                   .map(m => {
                     const n = (id: string) => state.players.find(p => p.id === id)?.name ?? '?'
                     return (
