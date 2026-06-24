@@ -36,11 +36,12 @@ export function findBestFour(
   // ponytail: collect all tied-best matches, pick randomly for variety
   const candidates: [Player, Player, Player, Player][] = [];
 
-  for (let i = 0; i < sorted.length - 3; i++)
-    for (let j = i + 1; j < sorted.length - 2; j++)
-      for (let k = j + 1; k < sorted.length - 1; k++)
-        for (let l = k + 1; l < sorted.length; l++) {
-          const [p, q, r, s] = [sorted[i], sorted[j], sorted[k], sorted[l]];
+  // ponytail: pin first-in-queue player (sorted[0]) — queue position beats skill balance
+  const first = sorted[0];
+  for (let j = 1; j < sorted.length - 2; j++)
+    for (let k = j + 1; k < sorted.length - 1; k++)
+      for (let l = k + 1; l < sorted.length; l++) {
+          const [p, q, r, s] = [first, sorted[j], sorted[k], sorted[l]];
           const fCount =
             (p.gender === "F" ? 1 : 0) +
             (q.gender === "F" ? 1 : 0) +
