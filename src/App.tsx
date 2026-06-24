@@ -9,12 +9,14 @@ import type { AppState, Player, PlayerStatus, TimeSlot } from './types'
 import { CourtCard } from './components/CourtCard'
 import { LedgerPanel } from './components/LedgerPanel'
 import { PlayerPanel } from './components/PlayerPanel'
+import { CalendarPicker } from './components/CalendarPicker'
 
 const TODAY = new Date().toLocaleDateString('en-CA')  // YYYY-MM-DD, valid for date column
 
 export function App() {
   const qc = useQueryClient()
   const [selectedDate, setSelectedDate] = useState(TODAY)
+  const [pickingDate, setPickingDate] = useState(false)
   const [playerPanelOpen, setPlayerPanelOpen] = useState(false)
   const [configOpen, setConfigOpen] = useState(false)
   const [reqMatchOpen, setReqMatchOpen] = useState(false)
@@ -183,19 +185,32 @@ export function App() {
         </div>
 
         <div className="header-right">
-          {/* Session picker — history only shown when Supabase is connected */}
-          <select
-            className="session-select"
-            value={selectedDate}
-            onChange={e => setSelectedDate(e.target.value)}
-          >
-            <option value={TODAY}>Hari Ini ({TODAY})</option>
-            {pastSessions.map(s => (
-              <option key={s.session_date} value={s.session_date}>
-                {s.session_date} — {s.player_count} pemain · {s.total_shuttles} bola
-              </option>
-            ))}
-          </select>
+          {/* Session picker */}
+          <div style={{ position: 'relative' }}>
+            <select
+              className="session-select"
+              value={selectedDate}
+              onChange={e => {
+                if (e.target.value === '__pick__') { setPickingDate(true); return }
+                setSelectedDate(e.target.value)
+              }}
+            >
+              <option value={TODAY}>Hari Ini ({TODAY})</option>
+              {pastSessions.map(s => (
+                <option key={s.session_date} value={s.session_date}>
+                  {s.session_date} — {s.player_count} pemain · {s.total_shuttles} bola
+                </option>
+              ))}
+              <option value="__pick__">📅 Pilih tanggal…</option>
+            </select>
+            {pickingDate && (
+              <CalendarPicker
+                value={selectedDate}
+                onSelect={setSelectedDate}
+                onClose={() => setPickingDate(false)}
+              />
+            )}
+          </div>
 
           <div className="player-count-badge">
             <strong>{activePlayers}</strong> / {state.targetPlayers}

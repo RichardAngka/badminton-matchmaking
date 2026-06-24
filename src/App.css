@@ -1,4 +1,19 @@
+@import "tailwindcss";
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+
+@theme inline {
+  --color-background:         var(--card);
+  --color-foreground:         var(--text);
+  --color-primary:            var(--gold);
+  --color-primary-foreground: #000000;
+  --color-accent:             var(--border-s);
+  --color-accent-foreground:  var(--text);
+  --color-muted-foreground:   var(--muted);
+  --color-border:             var(--border-s);
+  --color-ring:               var(--gold);
+  --color-popover:            var(--card);
+  --color-popover-foreground: var(--text);
+}
 
 :root {
   /* Depth layers — deep navy matching PB.SOR logo */
@@ -125,6 +140,14 @@ body {
 }
 .session-select:focus { outline: none; border-color: var(--gold); }
 .session-select option { background: var(--card); color: var(--text); }
+
+.cal-popup {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 200;
+  background: var(--card); border: 1px solid var(--border-s);
+  border-radius: var(--radius); padding: 0;
+  box-shadow: 0 8px 24px rgba(0,0,0,.5);
+  min-width: 280px;
+}
 
 .player-count-badge {
   background: var(--card);
