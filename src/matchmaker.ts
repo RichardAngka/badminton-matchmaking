@@ -14,7 +14,7 @@ function matchCost(
 ): number {
   const t1 = pair(a, b),
     t2 = pair(c, d);
-  if (t1[0] === t2[0] && t1[1] === t2[1]) return 1; // mirror — valid fallback when no variety possible
+  if (t1[0] === t2[0] && t1[1] === t2[1]) return t1[0] === t1[1] ? 0 : 1; // pure same-skill mirror = 0, mixed mirror = 1
   if (t1[0] + t1[1] === t2[0] + t2[1]) return 0; // balanced variety
   return Infinity; // unbalanced
 }
