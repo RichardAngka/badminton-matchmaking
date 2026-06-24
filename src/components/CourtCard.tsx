@@ -21,6 +21,7 @@ export function CourtCard({ courtId, match, players, upcoming, onEndMatch, onEdi
   const refShuttles = useRef<HTMLInputElement>(null)
   const refScoreL = useRef<HTMLInputElement>(null)
   const refScoreR = useRef<HTMLInputElement>(null)
+  const refSelesai = useRef<HTMLButtonElement>(null)
   const [editingPlayers, setEditingPlayers] = useState(false)
   const [editT1, setEditT1] = useState<[string, string]>(['', ''])
   const [editT2, setEditT2] = useState<[string, string]>(['', ''])
@@ -120,15 +121,16 @@ export function CourtCard({ courtId, match, players, upcoming, onEndMatch, onEdi
                 value={shuttles}
                 onChange={e => setShuttles(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && refScoreL.current?.focus()}
+                onBlur={() => { if (shuttles !== '' && scoreL === '') refScoreL.current?.focus() }}
               />
               <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 <input
                   ref={refScoreL}
                   className="score-input"
-                  type="number" inputMode="numeric" min="0"
+                  type="text" inputMode="numeric" pattern="[0-9]*" maxLength={2}
                   placeholder="Skor"
                   value={scoreL}
-                  onChange={e => setScoreL(e.target.value)}
+                  onChange={e => { const v = e.target.value.replace(/\D/g, ''); setScoreL(v); if (v.length === 2) refScoreR.current?.focus() }}
                   onKeyDown={e => e.key === 'Enter' && refScoreR.current?.focus()}
                   style={{ width: 52 }}
                 />
@@ -136,15 +138,16 @@ export function CourtCard({ courtId, match, players, upcoming, onEndMatch, onEdi
                 <input
                   ref={refScoreR}
                   className="score-input"
-                  type="number" inputMode="numeric" min="0"
+                  type="text" inputMode="numeric" pattern="[0-9]*" maxLength={2}
                   placeholder="Skor"
                   value={scoreR}
-                  onChange={e => setScoreR(e.target.value)}
+                  onChange={e => { const v = e.target.value.replace(/\D/g, ''); setScoreR(v); if (v.length === 2) refSelesai.current?.focus() }}
                   onKeyDown={e => e.key === 'Enter' && handleEnd()}
                   style={{ width: 52 }}
                 />
               </div>
               <button
+                ref={refSelesai}
                 className="btn btn-primary btn-sm"
                 onClick={handleEnd}
                 disabled={shuttles === '' || +shuttles < 0}
