@@ -10,9 +10,7 @@ import { CourtCard } from './components/CourtCard'
 import { LedgerPanel } from './components/LedgerPanel'
 import { PlayerPanel } from './components/PlayerPanel'
 
-const TODAY = new Date().toLocaleDateString('id-ID', {
-  day: '2-digit', month: '2-digit', year: 'numeric',
-})
+const TODAY = new Date().toLocaleDateString('en-CA')  // YYYY-MM-DD, valid for date column
 
 export function App() {
   const qc = useQueryClient()
@@ -21,7 +19,7 @@ export function App() {
   const [configOpen, setConfigOpen] = useState(false)
   const [reqMatchOpen, setReqMatchOpen] = useState(false)
   const [logoError, setLogoError] = useState(false)
-  const [editingMatch, setEditingMatch] = useState<{ id: string; bola: number; score: string } | null>(null)
+  const [editingMatch, setEditingMatch] = useState<{ id: string; bola: number; scoreL: string; scoreR: string } | null>(null)
 
   const isHistorical = selectedDate !== TODAY
 
@@ -33,7 +31,7 @@ export function App() {
   })
 
   // Session list from Supabase for the history picker
-  const { data: sessions = [] } = useQuery({
+  const { data: sessions = [], status: dbStatus } = useQuery({
     queryKey: ['sessions'],
     queryFn: listRemoteSessions,
     staleTime: 60_000,
@@ -124,6 +122,22 @@ export function App() {
     setEditingMatch(null)
   }
 
+  function editMatchPlayers(matchId: string, team1: [string, string], team2: [string, string]) {
+    if (isHistorical) return
+    const match = state.matches.find(m => m.id === matchId)!
+    const oldIds = new Set([...match.team1, ...match.team2])
+    const newIds = new Set([...team1, ...team2])
+    mut.mutate({
+      ...state,
+      matches: state.matches.map(m => m.id === matchId ? { ...m, team1, team2 } : m),
+      players: state.players.map(p => {
+        if (oldIds.has(p.id) && !newIds.has(p.id)) return { ...p, status: 'Waiting' as PlayerStatus }
+        if (!oldIds.has(p.id) && newIds.has(p.id)) return { ...p, status: 'Playing' as PlayerStatus }
+        return p
+      }),
+    })
+  }
+
   function endMatch(matchId: string, shuttlesUsed: number, score: string) {
     if (isHistorical) return
     const match = state.matches.find(m => m.id === matchId)!
@@ -187,9 +201,13 @@ export function App() {
             <strong>{activePlayers}</strong> / {state.targetPlayers}
           </div>
 
-          <div className="db-badge" title={supabase ? 'Terhubung ke Supabase' : 'Offline — hanya localStorage'}>
-            <div className={`db-dot ${supabase ? 'on' : 'off'}`} />
-            {supabase ? 'DB' : 'Local'}
+          <div className="db-badge" title={
+            !supabase ? 'Supabase tidak dikonfigurasi' :
+            dbStatus === 'error' ? 'Gagal terhubung ke Supabase' :
+            dbStatus === 'success' ? 'Terhubung ke Supabase' : 'Menghubungkan…'
+          }>
+            <div className={`db-dot ${!supabase || dbStatus === 'error' ? 'off' : dbStatus === 'success' ? 'on' : 'pending'}`} />
+            {!supabase ? 'Local' : dbStatus === 'error' ? 'DB ✗' : dbStatus === 'success' ? 'DB' : 'DB…'}
           </div>
 
           <button className="btn btn-ghost btn-sm" onClick={() => setConfigOpen(true)} title="Konfigurasi">⚙</button>
@@ -252,6 +270,7 @@ export function App() {
                   match={match}
                   players={state.players}
                   onEndMatch={isHistorical ? undefined : endMatch}
+                  onEditPlayers={isHistorical ? undefined : editMatchPlayers}
                 />
               )
             })}
@@ -295,7 +314,7 @@ export function App() {
                           <span className="mh-num">#{m.matchNumber}</span>
                           {editingMatch?.id === m.id ? (
                             <input
-                              type="number" min={0}
+                              type="number" inputMode="numeric" min={0}
                               value={editingMatch.bola}
                               onChange={e => setEditingMatch(em => em && ({ ...em, bola: +e.target.value }))}
                               style={{ width: 52, fontSize: 11, background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 4, padding: '1px 4px' }}
@@ -304,7 +323,7 @@ export function App() {
                             <span
                               className="mh-bola-tag"
                               style={!isHistorical ? { cursor: 'pointer' } : undefined}
-                              onClick={() => !isHistorical && setEditingMatch({ id: m.id, bola: m.shuttlesUsed ?? 0, score: m.score ?? '' })}
+                              onClick={() => !isHistorical && setEditingMatch({ id: m.id, bola: m.shuttlesUsed ?? 0, scoreL: (m.score ?? '').split('-')[0] ?? '', scoreR: (m.score ?? '').split('-')[1] ?? '' })}
                             >
                               {m.shuttlesUsed ?? 0} bola{!isHistorical && ' ✏'}
                             </span>
@@ -315,16 +334,28 @@ export function App() {
                         <div className="mh-team">{n(m.team2[0])} · {n(m.team2[1])}</div>
                         {editingMatch?.id === m.id ? (
                           <>
-                            <input
-                              value={editingMatch.score}
-                              placeholder="Skor (mis: 21-15)"
-                              onChange={e => setEditingMatch(em => em && ({ ...em, score: e.target.value }))}
-                              onKeyDown={e => e.key === 'Enter' && editMatch(m.id, editingMatch.bola, editingMatch.score)}
-                              style={{ fontSize: 11, width: '100%', marginTop: 4, background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 4, padding: '2px 6px', boxSizing: 'border-box' }}
-                            />
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                              <input
+                                type="number" inputMode="numeric" min={0}
+                                value={editingMatch.scoreL}
+                                placeholder="Skor"
+                                onChange={e => setEditingMatch(em => em && ({ ...em, scoreL: e.target.value }))}
+                                onKeyDown={e => { if (e.key === 'Enter') editMatch(m.id, editingMatch.bola, editingMatch.scoreL !== '' || editingMatch.scoreR !== '' ? `${editingMatch.scoreL}-${editingMatch.scoreR}` : '') }}
+                                style={{ width: 44, fontSize: 11, background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 4, padding: '2px 4px' }}
+                              />
+                              <span style={{ color: 'var(--muted)', flexShrink: 0 }}>–</span>
+                              <input
+                                type="number" inputMode="numeric" min={0}
+                                value={editingMatch.scoreR}
+                                placeholder="Skor"
+                                onChange={e => setEditingMatch(em => em && ({ ...em, scoreR: e.target.value }))}
+                                onKeyDown={e => { if (e.key === 'Enter') editMatch(m.id, editingMatch.bola, editingMatch.scoreL !== '' || editingMatch.scoreR !== '' ? `${editingMatch.scoreL}-${editingMatch.scoreR}` : '') }}
+                                style={{ width: 44, fontSize: 11, background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 4, padding: '2px 4px' }}
+                              />
+                            </div>
                             <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
                               <button className="btn btn-primary btn-sm" style={{ flex: 1, fontSize: 10, padding: '2px 6px' }}
-                                onClick={() => editMatch(m.id, editingMatch.bola, editingMatch.score)}>
+                                onClick={() => editMatch(m.id, editingMatch.bola, editingMatch.scoreL !== '' || editingMatch.scoreR !== '' ? `${editingMatch.scoreL}-${editingMatch.scoreR}` : '')}>
                                 Simpan
                               </button>
                               <button className="btn btn-ghost btn-sm" style={{ fontSize: 10, padding: '2px 6px' }}
@@ -509,7 +540,10 @@ function RequestMatchModal({ state, activeCourts, activeMatchMap, onSubmit, onCl
   const [courtId, setCourtId] = useState(emptyCourts[0] ?? 1)
   const [selected, setSelected] = useState<string[]>([])
 
-  const waiting = state.players.filter((p: Player) => p.status === 'Waiting')
+  // ponytail: longest-resting first so picker naturally shows the "due" players at the top
+  const waiting = state.players
+    .filter((p: Player) => p.status === 'Waiting')
+    .sort((a, b) => (a.restingSince ?? 0) - (b.restingSince ?? 0))
 
   function toggle(id: string) {
     setSelected(s => s.includes(id) ? s.filter(x => x !== id) : s.length < 4 ? [...s, id] : s)

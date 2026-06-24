@@ -36,11 +36,12 @@ export async function upsertRemoteState(date: string, state: AppState): Promise<
 
 export async function listRemoteSessions(): Promise<SessionMeta[]> {
   if (!supabase) return []
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('sessions')
     .select('session_date, state')
     .order('updated_at', { ascending: false })
     .limit(60)
+  if (error) throw new Error(error.message)
   return (data ?? []).map(row => ({
     session_date: row.session_date,
     player_count: (row.state?.players ?? []).filter((p: { status: string }) => p.status !== 'Left').length,

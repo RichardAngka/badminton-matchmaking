@@ -1,8 +1,6 @@
 import type { AppState } from './types'
 import { fetchRemoteState, upsertRemoteState } from './supabase'
 
-const KEY = 'pbsor-v1'
-
 export const DEFAULT_STATE: AppState = {
   sessionDate: new Date().toLocaleDateString('en-CA'),
   shuttlePrice: 14000,
@@ -16,35 +14,12 @@ export const DEFAULT_STATE: AppState = {
   matchCounter: 0,
 }
 
-export function loadState(): AppState {
-  try {
-    const raw = localStorage.getItem(KEY)
-    return raw ? { ...DEFAULT_STATE, ...JSON.parse(raw) } : DEFAULT_STATE
-  } catch {
-    return DEFAULT_STATE
-  }
-}
-
-export function saveLocal(state: AppState): AppState {
-  localStorage.setItem(KEY, JSON.stringify(state))
-  return state
-}
-
-// Loads for a given date: Supabase first, localStorage fallback
 export async function loadStateForDate(date: string): Promise<AppState> {
-  const today = new Date().toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' })
   const remote = await fetchRemoteState(date)
-  if (remote) {
-    if (date === today) saveLocal(remote)  // keep local cache warm for today
-    return { ...DEFAULT_STATE, ...remote }
-  }
-  if (date === today) return loadState()
-  return { ...DEFAULT_STATE, sessionDate: date }
+  return remote ? { ...DEFAULT_STATE, ...remote } : { ...DEFAULT_STATE, sessionDate: date }
 }
 
-// Saves locally + pushes to Supabase
 export async function persistState(date: string, state: AppState): Promise<AppState> {
-  saveLocal(state)
   await upsertRemoteState(date, state)
   return state
 }

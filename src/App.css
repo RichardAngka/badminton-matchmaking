@@ -566,8 +566,9 @@ body {
   font-size: 11px; font-weight: 600; color: var(--muted);
 }
 .db-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
-.db-dot.on  { background: var(--green); box-shadow: 0 0 6px var(--green); }
-.db-dot.off { background: var(--dim); }
+.db-dot.on      { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.db-dot.off     { background: var(--dim); }
+.db-dot.pending { background: var(--gold); }
 
 /* Scrollbar */
 ::-webkit-scrollbar { width: 4px; height: 4px; }

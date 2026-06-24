@@ -36,6 +36,14 @@ export function PlayerPanel({ open, onClose, state, onUpdate }: Props) {
   function addPlayer() {
     if (!name.trim()) return
     const now = Date.now()
+    const restTimes = state.players
+      .filter(p => p.status === 'Waiting' && p.restingSince != null)
+      .map(p => p.restingSince!)
+      .sort((a, b) => a - b)
+    // ponytail: interpolate between 2nd and last waiter — truly random, never steals #1
+    const restingSince = restTimes.length >= 2
+      ? restTimes[1] + Math.random() * (restTimes.at(-1)! - restTimes[1])
+      : now
     const player: Player = {
       id: crypto.randomUUID(),
       name: name.trim(),
@@ -43,7 +51,7 @@ export function PlayerPanel({ open, onClose, state, onUpdate }: Props) {
       gender,
       status: 'Waiting',
       checkInTime: now,
-      restingSince: now,
+      restingSince,
       totalCost: 0,
       gamesPlayed: 0,
     }
