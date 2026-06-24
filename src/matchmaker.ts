@@ -47,6 +47,9 @@ export function findBestFour(
             (r.gender === "F" ? 1 : 0) +
             (s.gender === "F" ? 1 : 0);
 
+          // same-skill group must be gender-pure (all-M or all-F only)
+          if (p.skill === q.skill && q.skill === r.skill && r.skill === s.skill && fCount > 0 && fCount < 4) continue;
+
           for (const [a, b, c, d] of [
             [p, q, r, s],
             [p, r, q, s],
@@ -66,7 +69,8 @@ export function findBestFour(
             if (pastOpponents.has(pairKey(a, d))) score += 1;
             if (pastOpponents.has(pairKey(b, c))) score += 1;
             if (pastOpponents.has(pairKey(b, d))) score += 1;
-            score += fCount === 4 ? 0 : 1;
+            const isSameSkill = a.skill === b.skill && b.skill === c.skill && c.skill === d.skill;
+            score += (fCount === 4 || (isSameSkill && fCount === 0)) ? 0 : 1;
 
             if (score < bestScore) {
               bestScore = score;
