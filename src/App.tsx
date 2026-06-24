@@ -196,7 +196,7 @@ export function App() {
           : p
       ),
     }
-    // auto-start first valid queued match on the now-empty court
+    // auto-start first valid queued match on the freed court (queue-only, no fallback)
     const queue = next.pregenerated ?? []
     for (let qi = 0; qi < queue.length; qi++) {
       const fourPlayers = queue[qi]
