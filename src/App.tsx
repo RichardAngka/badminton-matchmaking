@@ -20,8 +20,10 @@ export function App() {
   const [playerPanelOpen, setPlayerPanelOpen] = useState(false)
   const [configOpen, setConfigOpen] = useState(false)
   const [reqMatchOpen, setReqMatchOpen] = useState(false)
+  const [queueOpen, setQueueOpen] = useState(false)
   const [logoError, setLogoError] = useState(false)
   const [editingMatch, setEditingMatch] = useState<{ id: string; bola: number; scoreL: string; scoreR: string } | null>(null)
+  const [ledgerOpen, setLedgerOpen] = useState(false)
 
   const isHistorical = selectedDate !== TODAY
 
@@ -30,6 +32,7 @@ export function App() {
     queryKey: ['state', selectedDate],
     queryFn: () => loadStateForDate(selectedDate),
     staleTime: isHistorical ? Infinity : 30_000,
+    refetchInterval: isHistorical ? false : 600_000,
   })
 
   // Session list from Supabase for the history picker
@@ -54,26 +57,59 @@ export function App() {
   const hhmm   = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`
   const slot   = state.timeSlots.find(s => hhmm >= s.start && hhmm < s.end)
 
+  function buildPastSets(matches: typeof state.matches) {
+    const pastPairs = new Set(matches.flatMap(m => [
+      [...m.team1].sort().join('|'),
+      [...m.team2].sort().join('|'),
+    ]))
+    const pastOpponents = new Set(matches.flatMap(m => {
+      const [a, b] = m.team1, [c, d] = m.team2
+      return [[a,c],[a,d],[b,c],[b,d]].map(p => p.sort().join('|'))
+    }))
+    return { pastPairs, pastOpponents }
+  }
+
+  function addToQueue(four: [string, string, string, string]) {
+    if (isHistorical) return
+    mut.mutate({ ...state, pregenerated: [...(state.pregenerated ?? []), four] })
+  }
+
+  function removeFromQueue(idx: number) {
+    if (isHistorical) return
+    mut.mutate({ ...state, pregenerated: (state.pregenerated ?? []).filter((_, i) => i !== idx) })
+  }
+
   function generateMatches() {
     if (isHistorical) return
     let next = { ...state }
     for (let courtId = 1; courtId <= activeCourts; courtId++) {
       if (next.matches.some(m => m.courtId === courtId && !m.endTime)) continue
-      const waiting = next.players.filter(p => p.status === 'Waiting')
-      const pastPairs = new Set(next.matches.flatMap(m => [
-        [...m.team1].sort().join('|'),
-        [...m.team2].sort().join('|'),
-      ]))
-      const pastOpponents = new Set(next.matches.flatMap(m => {
-        const [a, b] = m.team1, [c, d] = m.team2
-        return [[a,c],[a,d],[b,c],[b,d]].map(p => p.sort().join('|'))
-      }))
-      const four = findBestFour(waiting, pastPairs, pastOpponents)
+      const queue = next.pregenerated ?? []
+      let four: Player[] | null = null
+      let newQueue = queue
+      // use first valid queue item (all 4 still Waiting)
+      for (let qi = 0; qi < queue.length; qi++) {
+        const fourPlayers = queue[qi]
+          .map(id => next.players.find(p => p.id === id && p.status === 'Waiting'))
+          .filter((p): p is Player => !!p)
+        if (fourPlayers.length === 4) {
+          four = fourPlayers
+          newQueue = queue.filter((_, i) => i !== qi)
+          break
+        }
+      }
+      if (!four) {
+        const waiting = next.players.filter(p => p.status === 'Waiting')
+        const { pastPairs, pastOpponents } = buildPastSets(next.matches)
+        four = findBestFour(waiting, pastPairs, pastOpponents)
+        newQueue = queue
+      }
       if (!four) break
       const matchNum = next.matchCounter + 1
       next = {
         ...next,
         matchCounter: matchNum,
+        pregenerated: newQueue,
         matches: [...next.matches, {
           id: crypto.randomUUID(),
           matchNumber: matchNum,
@@ -83,7 +119,7 @@ export function App() {
           startTime: Date.now(),
         }],
         players: next.players.map(p =>
-          four.find(f => f.id === p.id) ? { ...p, status: 'Playing' as PlayerStatus } : p
+          four!.find(f => f.id === p.id) ? { ...p, status: 'Playing' as PlayerStatus } : p
         ),
       }
     }
@@ -149,7 +185,7 @@ export function App() {
     const match = state.matches.find(m => m.id === matchId)!
     const costPerPlayer = Math.round((shuttlesUsed * state.shuttlePrice) / 4)
     const playerIds = new Set([...match.team1, ...match.team2])
-    mut.mutate({
+    let next: AppState = {
       ...state,
       matches: state.matches.map(m =>
         m.id === matchId ? { ...m, endTime: Date.now(), shuttlesUsed, score } : m
@@ -159,7 +195,35 @@ export function App() {
           ? { ...p, status: 'Waiting' as PlayerStatus, restingSince: Date.now(), totalCost: p.totalCost + costPerPlayer, gamesPlayed: p.gamesPlayed + 1 }
           : p
       ),
-    })
+    }
+    // auto-start first valid queued match on the now-empty court
+    const queue = next.pregenerated ?? []
+    for (let qi = 0; qi < queue.length; qi++) {
+      const fourPlayers = queue[qi]
+        .map(id => next.players.find(p => p.id === id && p.status === 'Waiting'))
+        .filter((p): p is Player => !!p)
+      if (fourPlayers.length === 4) {
+        const matchNum = next.matchCounter + 1
+        next = {
+          ...next,
+          matchCounter: matchNum,
+          pregenerated: queue.filter((_, i) => i !== qi),
+          matches: [...next.matches, {
+            id: crypto.randomUUID(),
+            matchNumber: matchNum,
+            courtId: match.courtId,
+            team1: [fourPlayers[0].id, fourPlayers[1].id],
+            team2: [fourPlayers[2].id, fourPlayers[3].id],
+            startTime: Date.now(),
+          }],
+          players: next.players.map(p =>
+            fourPlayers.find(f => f.id === p.id) ? { ...p, status: 'Playing' as PlayerStatus } : p
+          ),
+        }
+        break
+      }
+    }
+    mut.mutate(next)
   }
 
   // Sessions for picker: always show today first, then past (from Supabase)
@@ -229,6 +293,7 @@ export function App() {
             {!supabase ? 'Local' : dbStatus === 'error' ? 'DB ✗' : dbStatus === 'success' ? 'DB' : 'DB…'}
           </div>
 
+          <button className="btn btn-ghost btn-sm" onClick={() => setLedgerOpen(true)} title="Biaya Bola">💰</button>
           <button className="btn btn-ghost btn-sm" onClick={() => setConfigOpen(true)} title="Konfigurasi">⚙</button>
         </div>
       </header>
@@ -256,6 +321,12 @@ export function App() {
                 + Kelola Pemain
               </button>
               <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => setQueueOpen(true)}
+              >
+                ⚡ Antri Match
+              </button>
+              <button
                 className="btn btn-primary"
                 onClick={generateMatches}
                 disabled={waitingPlayers.length < 4}
@@ -279,20 +350,32 @@ export function App() {
           )}
 
           <div className="courts-grid">
-            {Array.from({ length: activeCourts }, (_, i) => i + 1).map(courtId => {
-              const matchId = activeMatchMap.get(courtId)
-              const match   = matchId ? state.matches.find(m => m.id === matchId) : undefined
-              return (
-                <CourtCard
-                  key={courtId}
-                  courtId={courtId}
-                  match={match}
-                  players={state.players}
-                  onEndMatch={isHistorical ? undefined : endMatch}
-                  onEditPlayers={isHistorical ? undefined : editMatchPlayers}
-                />
-              )
-            })}
+            {(() => {
+              // assign queue items to empty courts in order
+              const queue = state.pregenerated ?? []
+              let qi = 0
+              return Array.from({ length: activeCourts }, (_, i) => i + 1).map(courtId => {
+                const matchId = activeMatchMap.get(courtId)
+                const match   = matchId ? state.matches.find(m => m.id === matchId) : undefined
+                let upcoming: Player[] | undefined
+                if (!match && qi < queue.length) {
+                  const four = queue[qi++]
+                  const players = four.map(id => state.players.find(p => p.id === id)).filter((p): p is Player => !!p)
+                  if (players.length === 4) upcoming = players
+                }
+                return (
+                  <CourtCard
+                    key={courtId}
+                    courtId={courtId}
+                    match={match}
+                    players={state.players}
+                    upcoming={upcoming}
+                    onEndMatch={isHistorical ? undefined : endMatch}
+                    onEditPlayers={isHistorical ? undefined : editMatchPlayers}
+                  />
+                )
+              })
+            })()}
           </div>
 
           {waitingPlayers.length > 0 && (
@@ -311,6 +394,34 @@ export function App() {
                       {p.name}
                     </div>
                   ))}
+              </div>
+            </div>
+          )}
+
+          {(state.pregenerated ?? []).length > 0 && (
+            <div className="waiting-section" style={{ marginTop: 12 }}>
+              <div className="section-title">
+                <span>⚡ Antrian Match</span>
+                <span>{(state.pregenerated ?? []).length} antrian</span>
+              </div>
+              <div className="match-history-grid">
+                {(state.pregenerated ?? []).map((four, idx) => {
+                  const n = (id: string) => state.players.find(p => p.id === id)?.name ?? '?'
+                  return (
+                    <div key={idx} className="mh-card" style={{ borderLeft: '3px solid var(--gold)' }}>
+                      <div className="mh-card-header">
+                        <span className="mh-num">#{idx + 1}</span>
+                        {!isHistorical && (
+                          <button onClick={() => removeFromQueue(idx)}
+                            style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: 13, padding: '0 2px', lineHeight: 1 }}>✕</button>
+                        )}
+                      </div>
+                      <div className="mh-team" style={{ color: 'var(--gold)' }}>{n(four[0])} · {n(four[1])}</div>
+                      <div className="mh-vs">vs</div>
+                      <div className="mh-team" style={{ color: '#4fc3f7' }}>{n(four[2])} · {n(four[3])}</div>
+                    </div>
+                  )
+                })}
               </div>
             </div>
           )}
@@ -394,7 +505,8 @@ export function App() {
           )}
         </div>
 
-        <LedgerPanel state={state} />
+        {ledgerOpen && <div className="drawer-backdrop" onClick={() => setLedgerOpen(false)} />}
+        <LedgerPanel state={state} open={ledgerOpen} onClose={() => setLedgerOpen(false)} />
       </div>
 
       {/* ── Player panel (today only) ── */}
@@ -414,6 +526,14 @@ export function App() {
           activeMatchMap={activeMatchMap}
           onSubmit={(courtId, four) => { requestMatch(courtId, four); setReqMatchOpen(false) }}
           onClose={() => setReqMatchOpen(false)}
+        />
+      )}
+
+      {queueOpen && (
+        <AddToQueueModal
+          state={state}
+          onSubmit={four => { addToQueue(four); setQueueOpen(false) }}
+          onClose={() => setQueueOpen(false)}
         />
       )}
 
@@ -537,6 +657,98 @@ function ConfigModal({ state, onSave, onClose, onHardReset }: ConfigModalProps) 
                 </button>
               </div>
             </details>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Add to Queue modal ────────────────────────────────────────────────────────
+
+interface AddQueueProps {
+  state: AppState
+  onSubmit: (four: [string, string, string, string]) => void
+  onClose: () => void
+}
+
+function AddToQueueModal({ state, onSubmit, onClose }: AddQueueProps) {
+  const [selected, setSelected] = useState<string[]>([])
+
+  const waiting = [...state.players].filter(p => p.status === 'Waiting').sort((a, b) => (a.restingSince ?? 0) - (b.restingSince ?? 0))
+  const playing = state.players.filter(p => p.status === 'Playing')
+
+  function toggle(id: string) {
+    setSelected(s => s.includes(id) ? s.filter(x => x !== id) : s.length < 4 ? [...s, id] : s)
+  }
+
+  const ready = selected.length === 4
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>⚡ Antri Match</h2>
+          <button className="btn btn-ghost btn-sm" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body">
+          <div className="config-form">
+            <div>
+              <label className="config-label">
+                Pilih 4 Pemain ({selected.length}/4) — urutan: Tim 1 (1,2) vs Tim 2 (3,4)
+              </label>
+              {[{ label: 'Belum Main', list: waiting }, { label: 'Sedang Main', list: playing }].map(({ label, list }) =>
+                list.length > 0 && (
+                  <div key={label} style={{ marginTop: 8 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)', letterSpacing: 1, marginBottom: 4 }}>{label.toUpperCase()}</div>
+                    <div className="waiting-grid">
+                      {list.map(p => {
+                        const idx = selected.indexOf(p.id)
+                        const isTeam1 = idx === 0 || idx === 1
+                        return (
+                          <div key={p.id} className="waiting-chip" onClick={() => toggle(p.id)}
+                            style={{
+                              cursor: 'pointer',
+                              outline: idx >= 0 ? `2px solid ${isTeam1 ? 'var(--gold)' : '#4fc3f7'}` : 'none',
+                              opacity: selected.length === 4 && idx < 0 ? 0.4 : 1,
+                            }}>
+                            {idx >= 0 && <span style={{ fontSize: 10, fontWeight: 800, color: isTeam1 ? 'var(--gold)' : '#4fc3f7', minWidth: 14 }}>{idx + 1}</span>}
+                            <div className={`status-dot ${p.status === 'Playing' ? 'playing' : 'waiting'}`} />
+                            <span className={`skill-badge skill-${p.skill}`}>{p.skill}</span>
+                            {p.name}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              )}
+            </div>
+
+            {selected.length > 0 && (
+              <div style={{ fontSize: 12, color: 'var(--muted)', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <span style={{ color: 'var(--gold)' }}>
+                  Tim 1: {selected.slice(0,2).map(id => state.players.find(p => p.id === id)?.name ?? '?').join(' · ')}
+                </span>
+                {selected.length > 2 && (
+                  <span style={{ color: '#4fc3f7' }}>
+                    Tim 2: {selected.slice(2,4).map(id => state.players.find(p => p.id === id)?.name ?? '?').join(' · ')}
+                  </span>
+                )}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                className="btn btn-primary"
+                style={{ flex: 1 }}
+                disabled={!ready}
+                onClick={() => onSubmit(selected as [string, string, string, string])}
+              >
+                Tambah ke Antrian
+              </button>
+              <button className="btn btn-ghost" onClick={onClose}>Batal</button>
+            </div>
           </div>
         </div>
       </div>

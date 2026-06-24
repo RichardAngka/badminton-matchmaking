@@ -213,12 +213,11 @@ body {
 /* ── Layout ── */
 .main-layout {
   display: grid;
-  grid-template-columns: 1fr 340px;
+  grid-template-columns: 1fr;
   min-height: calc(100vh - 61px);
   position: relative;
   z-index: 1;
 }
-@media (max-width: 960px) { .main-layout { grid-template-columns: 1fr; } }
 
 /* ── Left panel ── */
 .left-panel { padding: 14px 16px; border-right: 1px solid var(--border); overflow-y: auto; }
@@ -452,7 +451,18 @@ body {
 .mh-score      { color: var(--gold); font-weight: 800; font-size: 14px; margin-top: 3px; }
 
 /* ── Right panel / Ledger ── */
-.right-panel { background: var(--surface); display: flex; flex-direction: column; border-left: 1px solid var(--border); }
+.right-panel {
+  position: fixed; top: 61px; right: 0; height: calc(100vh - 61px); width: 340px;
+  background: var(--surface); display: flex; flex-direction: column;
+  border-left: 1px solid var(--border);
+  transform: translateX(100%); transition: transform .22s ease;
+  z-index: 250;
+}
+.right-panel.open { transform: translateX(0); }
+.drawer-backdrop {
+  position: fixed; inset: 0; background: rgba(3,9,18,.6);
+  z-index: 249; backdrop-filter: blur(3px);
+}
 
 .ledger-header { padding: 13px 16px; border-bottom: 1px solid var(--border-s); }
 .ledger-title { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); margin-bottom: 4px; }

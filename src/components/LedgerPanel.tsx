@@ -1,7 +1,7 @@
 import * as XLSX from 'xlsx'
 import type { AppState } from '../types'
 
-interface Props { state: AppState }
+interface Props { state: AppState; open: boolean; onClose: () => void }
 
 function rp(amount: number) {
   return `Rp ${amount.toLocaleString('id-ID')}`
@@ -34,20 +34,23 @@ function exportXLSX(state: AppState) {
   XLSX.writeFile(wb, `acematch-${state.sessionDate.replace(/\//g, '-')}.xlsx`)
 }
 
-export function LedgerPanel({ state }: Props) {
+export function LedgerPanel({ state, open, onClose }: Props) {
   const totalShuttles = state.matches.reduce((sum, m) => sum + (m.shuttlesUsed ?? 0), 0)
   const rows = [...state.players]
     .filter(p => p.gamesPlayed > 0 || p.totalCost > 0)
     .sort((a, b) => b.totalCost - a.totalCost)
 
   return (
-    <div className="right-panel">
-      <div className="ledger-header">
-        <div className="ledger-title">List Biaya Bola / Orang</div>
-        <div className="ledger-total">
-          {totalShuttles} Bola
-          <span>total sesi</span>
+    <div className={`right-panel${open ? ' open' : ''}`}>
+      <div className="ledger-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <div>
+          <div className="ledger-title">List Biaya Bola / Orang</div>
+          <div className="ledger-total">
+            {totalShuttles} Bola
+            <span>total sesi</span>
+          </div>
         </div>
+        <button className="btn btn-ghost btn-sm" onClick={onClose} style={{ marginTop: 2 }}>✕</button>
       </div>
 
       <div className="ledger-list">

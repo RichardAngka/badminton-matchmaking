@@ -40,4 +40,5 @@ export interface AppState {
   players: Player[]
   matches: Match[]
   matchCounter: number
+  pregenerated?: [string, string, string, string][]
 }

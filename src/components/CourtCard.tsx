@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import type { Match, Player } from '../types'
 
 interface Props {
   courtId: number
   match: Match | undefined
   players: Player[]
+  upcoming?: Player[]
   onEndMatch?: (matchId: string, shuttles: number, score: string) => void
   onEditPlayers?: (matchId: string, team1: [string, string], team2: [string, string]) => void
 }
@@ -13,10 +14,13 @@ function byId(players: Player[], id: string) {
   return players.find(p => p.id === id)
 }
 
-export function CourtCard({ courtId, match, players, onEndMatch, onEditPlayers }: Props) {
+export function CourtCard({ courtId, match, players, upcoming, onEndMatch, onEditPlayers }: Props) {
   const [shuttles, setShuttles] = useState('')
   const [scoreL, setScoreL] = useState('')
   const [scoreR, setScoreR] = useState('')
+  const refShuttles = useRef<HTMLInputElement>(null)
+  const refScoreL = useRef<HTMLInputElement>(null)
+  const refScoreR = useRef<HTMLInputElement>(null)
   const [editingPlayers, setEditingPlayers] = useState(false)
   const [editT1, setEditT1] = useState<[string, string]>(['', ''])
   const [editT2, setEditT2] = useState<[string, string]>(['', ''])
@@ -109,25 +113,28 @@ export function CourtCard({ courtId, match, players, onEndMatch, onEditPlayers }
           {onEndMatch && !editingPlayers && (
             <div className="end-match-form">
               <input
+                ref={refShuttles}
                 className="shuttle-input"
                 type="number" inputMode="numeric" min="0"
                 placeholder="Bola"
                 value={shuttles}
                 onChange={e => setShuttles(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleEnd()}
+                onKeyDown={e => e.key === 'Enter' && refScoreL.current?.focus()}
               />
               <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 <input
+                  ref={refScoreL}
                   className="score-input"
                   type="number" inputMode="numeric" min="0"
                   placeholder="Skor"
                   value={scoreL}
                   onChange={e => setScoreL(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleEnd()}
+                  onKeyDown={e => e.key === 'Enter' && refScoreR.current?.focus()}
                   style={{ width: 52 }}
                 />
                 <span style={{ color: 'var(--muted)', flexShrink: 0 }}>–</span>
                 <input
+                  ref={refScoreR}
                   className="score-input"
                   type="number" inputMode="numeric" min="0"
                   placeholder="Skor"
@@ -147,6 +154,34 @@ export function CourtCard({ courtId, match, players, onEndMatch, onEditPlayers }
             </div>
           )}
         </>
+      ) : upcoming && upcoming.length === 4 ? (
+        <div style={{ padding: '4px 0' }}>
+          <div style={{ fontSize: 10, color: 'var(--gold)', fontWeight: 700, letterSpacing: 1, marginBottom: 6 }}>SEGERA BERMAIN</div>
+          <div className="match-teams" style={{ opacity: 0.85 }}>
+            <div className="team">
+              {upcoming.slice(0, 2).map(p => (
+                <div key={p.id} className="player-row">
+                  <span className={`skill-badge skill-${p.skill}`}>{p.skill}</span>
+                  <span className="player-name">{p.name}</span>
+                  {p.gender === 'F' && <span className="gender-tag gender-F">W</span>}
+                </div>
+              ))}
+            </div>
+            <div className="vs-divider">VS</div>
+            <div className="team team-2">
+              {upcoming.slice(2, 4).map(p => (
+                <div key={p.id} className="player-row player-row-r">
+                  <span className={`skill-badge skill-${p.skill}`}>{p.skill}</span>
+                  <span className="player-name">{p.name}</span>
+                  {p.gender === 'F' && <span className="gender-tag gender-F">W</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+          <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 6, textAlign: 'center' }}>
+            Klik <strong>Generate Match</strong> untuk mulai
+          </div>
+        </div>
       ) : (
         <div className="empty-court-msg">
           Klik <strong>Generate Match</strong><br />
