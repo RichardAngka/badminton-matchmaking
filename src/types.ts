@@ -1,12 +1,14 @@
 export type SkillLevel = 'A1' | 'A2' | 'B1' | 'B2'
 export type Gender = 'M' | 'F'
 export type PlayerStatus = 'Waiting' | 'Playing' | 'Left'
+export type PlayerType = 'harian' | 'member'
 
 export interface Player {
   id: string
   name: string
   skill: SkillLevel
   gender: Gender
+  type: PlayerType
   status: PlayerStatus
   checkInTime: number | null
   restingSince: number | null

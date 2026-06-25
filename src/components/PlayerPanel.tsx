@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { AppState, Match, Player, SkillLevel, Gender, PlayerStatus } from '../types'
+import type { AppState, Match, Player, SkillLevel, Gender, PlayerStatus, PlayerType } from '../types'
 
 interface Props {
   open: boolean
@@ -14,13 +14,14 @@ export function PlayerPanel({ open, onClose, state, onUpdate }: Props) {
   const [name, setName] = useState('')
   const [skill, setSkill] = useState<SkillLevel>('B1')
   const [gender, setGender] = useState<Gender>('M')
+  const [playerType, setPlayerType] = useState<PlayerType>('member')
   const [editId, setEditId] = useState<string | null>(null)
-  const [editDraft, setEditDraft] = useState({ name: '', skill: 'B1' as SkillLevel, gender: 'M' as Gender })
+  const [editDraft, setEditDraft] = useState({ name: '', skill: 'B1' as SkillLevel, gender: 'M' as Gender, type: 'member' as PlayerType })
   const [profileId, setProfileId] = useState<string | null>(null)
 
   function startEdit(p: Player) {
     setEditId(p.id)
-    setEditDraft({ name: p.name, skill: p.skill, gender: p.gender })
+    setEditDraft({ name: p.name, skill: p.skill, gender: p.gender, type: p.type ?? 'member' })
   }
 
   function saveEdit() {
@@ -28,7 +29,7 @@ export function PlayerPanel({ open, onClose, state, onUpdate }: Props) {
     onUpdate({
       ...state,
       players: state.players.map(p =>
-        p.id === editId ? { ...p, name: editDraft.name.trim(), skill: editDraft.skill, gender: editDraft.gender } : p
+        p.id === editId ? { ...p, name: editDraft.name.trim(), skill: editDraft.skill, gender: editDraft.gender, type: editDraft.type } : p
       ),
     })
     setEditId(null)
@@ -50,10 +51,11 @@ export function PlayerPanel({ open, onClose, state, onUpdate }: Props) {
       name: name.trim(),
       skill,
       gender,
+      type: playerType,
       status: 'Waiting',
       checkInTime: now,
       restingSince,
-      totalCost: 0,
+      totalCost: playerType === 'harian' ? 25000 : 0,
       gamesPlayed: 0,
     }
     onUpdate({ ...state, players: [...state.players, player] })
@@ -118,6 +120,10 @@ export function PlayerPanel({ open, onClose, state, onUpdate }: Props) {
                       <option value="M">M</option>
                       <option value="F">F</option>
                     </select>
+                    <select value={editDraft.type} onChange={e => setEditDraft(d => ({ ...d, type: e.target.value as PlayerType }))} style={{ fontSize: 12, padding: '2px 4px', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)' }}>
+                      <option value="member">Member</option>
+                      <option value="harian">Harian</option>
+                    </select>
                     <button className="btn btn-primary btn-sm" onClick={saveEdit}>✓</button>
                     <button className="btn btn-ghost btn-sm" onClick={() => setEditId(null)}>✕</button>
                   </div>
@@ -130,6 +136,9 @@ export function PlayerPanel({ open, onClose, state, onUpdate }: Props) {
                   </div>
                   <div className="player-item-meta">
                     <span className={`skill-badge skill-${p.skill}`}>{p.skill}</span>
+                    <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: (p.type ?? 'member') === 'harian' ? '#f59e0b22' : '#4fc3f722', color: (p.type ?? 'member') === 'harian' ? '#f59e0b' : '#4fc3f7' }}>
+                      {(p.type ?? 'member') === 'harian' ? 'Harian' : 'Member'}
+                    </span>
                     <span>{p.gamesPlayed}x main</span>
                     {p.totalCost > 0 && <span>Rp {p.totalCost.toLocaleString('id-ID')}</span>}
                     {p.status === 'Playing' && <span style={{ color: 'var(--primary)' }}>● Bermain</span>}
@@ -188,6 +197,13 @@ export function PlayerPanel({ open, onClose, state, onUpdate }: Props) {
               <select value={gender} onChange={e => setGender(e.target.value as Gender)}>
                 <option value="M">M — Pria</option>
                 <option value="F">F — Wanita</option>
+              </select>
+            </div>
+            <div className="form-field">
+              <label>Tipe</label>
+              <select value={playerType} onChange={e => setPlayerType(e.target.value as PlayerType)}>
+                <option value="member">Member</option>
+                <option value="harian">Harian (+Rp 25.000)</option>
               </select>
             </div>
           </div>
