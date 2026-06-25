@@ -55,7 +55,7 @@ export function PlayerPanel({ open, onClose, state, onUpdate }: Props) {
       status: 'Waiting',
       checkInTime: now,
       restingSince,
-      totalCost: playerType === 'harian' ? 25000 : 0,
+      totalCost: playerType === 'harian' ? (state.harianFee ?? 25000) : 0,
       gamesPlayed: 0,
     }
     onUpdate({ ...state, players: [...state.players, player] })

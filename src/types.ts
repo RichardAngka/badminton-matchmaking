@@ -37,6 +37,7 @@ export interface TimeSlot {
 export interface AppState {
   sessionDate: string
   shuttlePrice: number
+  harianFee: number
   targetPlayers: number
   timeSlots: TimeSlot[]
   players: Player[]

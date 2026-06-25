@@ -4,6 +4,7 @@ import { fetchRemoteState, upsertRemoteState } from './supabase'
 export const DEFAULT_STATE: AppState = {
   sessionDate: new Date().toLocaleDateString('en-CA'),
   shuttlePrice: 14000,
+  harianFee: 25000,
   targetPlayers: 36,
   timeSlots: [
     { start: '17:00', end: '20:00', courts: 2 },

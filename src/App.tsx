@@ -601,6 +601,7 @@ function ConfigModal({ state, onSave, onClose, onHardReset }: ConfigModalProps) 
   const [form, setForm] = useState({
     sessionDate:   state.sessionDate,
     shuttlePrice:  state.shuttlePrice,
+    harianFee:     state.harianFee ?? 25000,
     targetPlayers: state.targetPlayers,
     timeSlots:     state.timeSlots.map(s => ({ ...s })),
   })
@@ -635,6 +636,11 @@ function ConfigModal({ state, onSave, onClose, onHardReset }: ConfigModalProps) 
               <label className="config-label">Harga Bola per Biji (Rp)</label>
               <input className="config-input" type="number" min={1} value={form.shuttlePrice}
                 onChange={e => setForm(f => ({ ...f, shuttlePrice: +e.target.value }))} />
+            </div>
+            <div>
+              <label className="config-label">Biaya Harian (Rp)</label>
+              <input className="config-input" type="number" min={0} value={form.harianFee}
+                onChange={e => setForm(f => ({ ...f, harianFee: +e.target.value }))} />
             </div>
             <div>
               <label className="config-label">Time Slots & Lapangan</label>
