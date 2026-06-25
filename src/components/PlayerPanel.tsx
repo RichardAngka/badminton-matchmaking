@@ -109,7 +109,7 @@ export function PlayerPanel({ open, onClose, state, onUpdate }: Props) {
               className={`btn btn-sm ${filterGrade === g ? 'btn-primary' : 'btn-ghost'}`}
               onClick={() => setFilterGrade(g)}
             >
-              {g ?? 'Semua'}
+              {g ?? 'Semua'} ({state.players.filter(p => p.status !== 'Left' && (g === null || p.skill === g)).length})
             </button>
           ))}
         </div>
