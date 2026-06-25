@@ -9,6 +9,7 @@ interface Props {
 }
 
 const STATUS_ORDER: Record<PlayerStatus, number> = { Waiting: 0, Playing: 1, Left: 2 }
+const SKILL_ORDER: Record<SkillLevel, number> = { A1: 0, A2: 1, B1: 2, B2: 3 }
 
 export function PlayerPanel({ open, onClose, state, onUpdate }: Props) {
   const [name, setName] = useState('')
@@ -18,6 +19,7 @@ export function PlayerPanel({ open, onClose, state, onUpdate }: Props) {
   const [editId, setEditId] = useState<string | null>(null)
   const [editDraft, setEditDraft] = useState({ name: '', skill: 'B1' as SkillLevel, gender: 'M' as Gender, type: 'member' as PlayerType })
   const [profileId, setProfileId] = useState<string | null>(null)
+  const [filterGrade, setFilterGrade] = useState<SkillLevel | null>(null)
 
   function startEdit(p: Player) {
     setEditId(p.id)
@@ -75,7 +77,11 @@ export function PlayerPanel({ open, onClose, state, onUpdate }: Props) {
     })
   }
 
-  const sorted = [...state.players].sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status])
+  const sorted = [...state.players].sort((a, b) => {
+    const skillDiff = SKILL_ORDER[a.skill] - SKILL_ORDER[b.skill]
+    return skillDiff !== 0 ? skillDiff : STATUS_ORDER[a.status] - STATUS_ORDER[b.status]
+  })
+  const displayed = filterGrade ? sorted.filter(p => p.skill === filterGrade) : sorted
 
   const dotStyle = (p: Player) => ({
     background: p.status === 'Waiting' ? 'var(--accent)' : p.status === 'Playing' ? 'var(--primary)' : 'var(--dim)',
@@ -96,8 +102,20 @@ export function PlayerPanel({ open, onClose, state, onUpdate }: Props) {
           <button className="btn btn-ghost btn-sm" onClick={onClose}>✕</button>
         </div>
 
+        <div style={{ display: 'flex', gap: 4, padding: '8px 12px 0', flexWrap: 'wrap' }}>
+          {([null, 'A1', 'A2', 'B1', 'B2'] as (SkillLevel | null)[]).map(g => (
+            <button
+              key={g ?? 'all'}
+              className={`btn btn-sm ${filterGrade === g ? 'btn-primary' : 'btn-ghost'}`}
+              onClick={() => setFilterGrade(g)}
+            >
+              {g ?? 'Semua'}
+            </button>
+          ))}
+        </div>
+
         <div className="player-list">
-          {sorted.map(p => (
+          {displayed.map(p => (
             <div key={p.id} className={`player-item${p.status === 'Left' ? ' is-left' : ''}`}>
               <div style={dotStyle(p)} />
               {editId === p.id ? (
@@ -161,6 +179,11 @@ export function PlayerPanel({ open, onClose, state, onUpdate }: Props) {
               </div>
             </div>
           ))}
+          {displayed.length === 0 && state.players.length > 0 && (
+            <div style={{ padding: '28px 16px', textAlign: 'center', color: 'var(--dim)', fontSize: 13 }}>
+              Tidak ada pemain grade {filterGrade}.
+            </div>
+          )}
           {state.players.length === 0 && (
             <div style={{ padding: '28px 16px', textAlign: 'center', color: 'var(--dim)', fontSize: 13 }}>
               Belum ada pemain.<br />Tambah pemain di bawah.
@@ -256,6 +279,9 @@ function PlayerProfileModal({ player, matches, allPlayers, onClose }: {
               <div style={{ display: 'flex', gap: 6, marginTop: 4, alignItems: 'center' }}>
                 <span className={`skill-badge skill-${player.skill}`}>{player.skill}</span>
                 <span className={`gender-tag gender-${player.gender}`}>{player.gender === 'F' ? 'W' : 'M'}</span>
+                <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: (player.type ?? 'member') === 'harian' ? '#f59e0b22' : '#4fc3f722', color: (player.type ?? 'member') === 'harian' ? '#f59e0b' : '#4fc3f7' }}>
+                  {(player.type ?? 'member') === 'harian' ? 'Harian' : 'Member'}
+                </span>
               </div>
               <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
                 {player.gamesPlayed}x main · Rp {player.totalCost.toLocaleString('id-ID')}
