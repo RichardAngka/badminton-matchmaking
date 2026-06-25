@@ -144,6 +144,21 @@ export function App() {
     setEditingMatch(null)
   }
 
+  function deleteMatch(matchId: string) {
+    if (!confirm('Hapus match ini? Biaya shuttle akan dikembalikan.')) return
+    const match = state.matches.find(m => m.id === matchId)!
+    const cost = Math.round(((match.shuttlesUsed ?? 0) * state.shuttlePrice) / 4)
+    const playerIds = new Set([...match.team1, ...match.team2])
+    mut.mutate({
+      ...state,
+      matches: state.matches.filter(m => m.id !== matchId),
+      players: cost === 0 ? state.players : state.players.map(p =>
+        playerIds.has(p.id) ? { ...p, totalCost: p.totalCost - cost } : p
+      ),
+    })
+    setEditingMatch(null)
+  }
+
   function editMatchPlayers(matchId: string, team1: [string, string], team2: [string, string]) {
     if (isHistorical) return
     const match = state.matches.find(m => m.id === matchId)!
@@ -443,7 +458,10 @@ export function App() {
                     const t1t = teamType(m.team1, state.players)
                     const t2t = teamType(m.team2, state.players)
                     return (
-                      <div key={m.id} className="mh-card" style={{ borderLeft: `3px solid ${TYPE_COLOR[t1t]}` }}>
+                      <div key={m.id} className="mh-card"
+                        style={{ borderLeft: `3px solid ${TYPE_COLOR[t1t]}`, ...(!isHistorical ? { cursor: 'pointer' } : {}) }}
+                        onClick={() => !isHistorical && setEditingMatch({ id: m.id, bola: m.shuttlesUsed ?? 0, scoreL: (m.score ?? '').split('-')[0] ?? '', scoreR: (m.score ?? '').split('-')[1] ?? '' })}
+                      >
                         <div className="mh-card-header">
                           <span className="mh-num">#{m.matchNumber}</span>
                           <span style={{ fontSize: 10, display: 'flex', gap: 2, alignItems: 'center', background: 'var(--bg)', borderRadius: 3, padding: '1px 5px' }}>
@@ -451,61 +469,14 @@ export function App() {
                             <span style={{ color: 'var(--dim)' }}>vs</span>
                             <span style={{ color: TYPE_COLOR[t2t], fontWeight: 700 }}>{t2t}</span>
                           </span>
-                          {editingMatch?.id === m.id ? (
-                            <input
-                              type="number" inputMode="numeric" min={0}
-                              value={editingMatch.bola}
-                              onChange={e => setEditingMatch(em => em && ({ ...em, bola: +e.target.value }))}
-                              style={{ width: 52, fontSize: 11, background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 4, padding: '1px 4px' }}
-                            />
-                          ) : (
-                            <span
-                              className="mh-bola-tag"
-                              style={!isHistorical ? { cursor: 'pointer' } : undefined}
-                              onClick={() => !isHistorical && setEditingMatch({ id: m.id, bola: m.shuttlesUsed ?? 0, scoreL: (m.score ?? '').split('-')[0] ?? '', scoreR: (m.score ?? '').split('-')[1] ?? '' })}
-                            >
-                              {m.shuttlesUsed ?? 0} bola{!isHistorical && ' ✏'}
-                            </span>
-                          )}
+                          <span className="mh-bola-tag">
+                            {m.shuttlesUsed ?? 0} bola{!isHistorical && ' ✏'}
+                          </span>
                         </div>
                         <div className="mh-team">{ns(m.team1[0])} · {ns(m.team1[1])}</div>
                         <div className="mh-vs">vs</div>
                         <div className="mh-team">{ns(m.team2[0])} · {ns(m.team2[1])}</div>
-                        {editingMatch?.id === m.id ? (
-                          <>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
-                              <input
-                                type="number" inputMode="numeric" min={0}
-                                value={editingMatch.scoreL}
-                                placeholder="Skor"
-                                onChange={e => setEditingMatch(em => em && ({ ...em, scoreL: e.target.value }))}
-                                onKeyDown={e => { if (e.key === 'Enter') editMatch(m.id, editingMatch.bola, editingMatch.scoreL !== '' || editingMatch.scoreR !== '' ? `${editingMatch.scoreL}-${editingMatch.scoreR}` : '') }}
-                                style={{ width: 44, fontSize: 11, background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 4, padding: '2px 4px' }}
-                              />
-                              <span style={{ color: 'var(--muted)', flexShrink: 0 }}>–</span>
-                              <input
-                                type="number" inputMode="numeric" min={0}
-                                value={editingMatch.scoreR}
-                                placeholder="Skor"
-                                onChange={e => setEditingMatch(em => em && ({ ...em, scoreR: e.target.value }))}
-                                onKeyDown={e => { if (e.key === 'Enter') editMatch(m.id, editingMatch.bola, editingMatch.scoreL !== '' || editingMatch.scoreR !== '' ? `${editingMatch.scoreL}-${editingMatch.scoreR}` : '') }}
-                                style={{ width: 44, fontSize: 11, background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 4, padding: '2px 4px' }}
-                              />
-                            </div>
-                            <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
-                              <button className="btn btn-primary btn-sm" style={{ flex: 1, fontSize: 10, padding: '2px 6px' }}
-                                onClick={() => editMatch(m.id, editingMatch.bola, editingMatch.scoreL !== '' || editingMatch.scoreR !== '' ? `${editingMatch.scoreL}-${editingMatch.scoreR}` : '')}>
-                                Simpan
-                              </button>
-                              <button className="btn btn-ghost btn-sm" style={{ fontSize: 10, padding: '2px 6px' }}
-                                onClick={() => setEditingMatch(null)}>
-                                Batal
-                              </button>
-                            </div>
-                          </>
-                        ) : (
-                          m.score && <div className="mh-score">{m.score}</div>
-                        )}
+                        {m.score && <div className="mh-score">{m.score}</div>}
                       </div>
                     )
                   })}
@@ -517,6 +488,15 @@ export function App() {
         {ledgerOpen && <div className="drawer-backdrop" onClick={() => setLedgerOpen(false)} />}
         <LedgerPanel state={state} open={ledgerOpen} onClose={() => setLedgerOpen(false)} />
       </div>
+
+      {editingMatch && (
+        <EditMatchModal
+          editingMatch={editingMatch}
+          setEditingMatch={setEditingMatch}
+          onSave={editMatch}
+          onDelete={deleteMatch}
+        />
+      )}
 
       {/* ── Player panel (today only) ── */}
       {!isHistorical && (
@@ -854,3 +834,75 @@ function AddToQueueModal({ state, initialSelected, submitLabel, onSubmit, onClos
   )
 }
 
+// ── Edit Match modal ──────────────────────────────────────────────────────────
+
+type EditingMatch = { id: string; bola: number; scoreL: string; scoreR: string }
+
+function EditMatchModal({ editingMatch, setEditingMatch, onSave, onDelete }: {
+  editingMatch: EditingMatch
+  setEditingMatch: (v: EditingMatch | null) => void
+  onSave: (matchId: string, bola: number, score: string) => void
+  onDelete: (matchId: string) => void
+}) {
+  const score = editingMatch.scoreL !== '' || editingMatch.scoreR !== ''
+    ? `${editingMatch.scoreL}-${editingMatch.scoreR}` : ''
+  const set = (patch: Partial<EditingMatch>) => setEditingMatch({ ...editingMatch, ...patch })
+  return (
+    <div className="modal-overlay" onClick={() => setEditingMatch(null)}>
+      <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 280 }}>
+        <div className="modal-header">
+          <h2>Edit Match</h2>
+          <button className="btn btn-ghost btn-sm" onClick={() => setEditingMatch(null)}>✕</button>
+        </div>
+        <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div>
+            <label className="config-label">Bola</label>
+            <input
+              type="number" inputMode="numeric" min={0}
+              className="config-input"
+              value={editingMatch.bola}
+              onChange={e => set({ bola: +e.target.value })}
+            />
+          </div>
+          <div>
+            <label className="config-label">Skor</label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input
+                type="number" inputMode="numeric" min={0}
+                className="config-input"
+                placeholder="Tim 1"
+                value={editingMatch.scoreL}
+                onChange={e => set({ scoreL: e.target.value })}
+                onKeyDown={e => { if (e.key === 'Enter') onSave(editingMatch.id, editingMatch.bola, score) }}
+              />
+              <span style={{ color: 'var(--muted)', flexShrink: 0 }}>–</span>
+              <input
+                type="number" inputMode="numeric" min={0}
+                className="config-input"
+                placeholder="Tim 2"
+                value={editingMatch.scoreR}
+                onChange={e => set({ scoreR: e.target.value })}
+                onKeyDown={e => { if (e.key === 'Enter') onSave(editingMatch.id, editingMatch.bola, score) }}
+              />
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn btn-primary" style={{ flex: 1 }}
+              onClick={() => onSave(editingMatch.id, editingMatch.bola, score)}>
+              Simpan
+            </button>
+            <button className="btn btn-ghost" onClick={() => setEditingMatch(null)}>
+              Batal
+            </button>
+          </div>
+          <div style={{ borderTop: '1px solid var(--border-s)', paddingTop: 12, marginTop: 4 }}>
+            <button className="btn btn-ghost" style={{ width: '100%', color: 'var(--red, #ef4444)' }}
+              onClick={() => onDelete(editingMatch.id)}>
+              Hapus Match
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
