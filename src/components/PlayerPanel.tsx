@@ -64,6 +64,11 @@ export function PlayerPanel({ open, onClose, state, onUpdate }: Props) {
     setName('')
   }
 
+  function deletePlayer(id: string) {
+    if (!window.confirm('Hapus pemain ini?')) return
+    onUpdate({ ...state, players: state.players.filter(p => p.id !== id) })
+  }
+
   function markLeft(p: Player) {
     if (p.status === 'Playing') return  // can't leave mid-game
     const newStatus: PlayerStatus = p.status === 'Left' ? 'Waiting' : 'Left'
@@ -175,6 +180,9 @@ export function PlayerPanel({ open, onClose, state, onUpdate }: Props) {
                   >
                     {p.status === 'Left' ? '↩' : '→'}
                   </button>
+                )}
+                {p.status !== 'Playing' && editId !== p.id && (
+                  <button className="btn btn-ghost btn-sm" onClick={() => deletePlayer(p.id)} style={{ color: '#ef4444' }} title="Hapus pemain">✕</button>
                 )}
               </div>
             </div>
