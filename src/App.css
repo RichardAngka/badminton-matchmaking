@@ -437,7 +437,20 @@ body {
   grid-template-columns: repeat(4, 1fr);
   gap: 6px;
 }
-@media (max-width: 600px) { .match-history-grid { grid-template-columns: 1fr; } }
+@media (max-width: 600px) { .match-history-grid { grid-template-columns: repeat(2, 1fr); } }
+
+/* ── iPhone 15 / mobile (≤430px) ── */
+@media (max-width: 430px) {
+  .header { padding: 8px 12px; gap: 8px; }
+  .header-title { display: none; }
+  .header-right { gap: 6px; }
+  .session-select { max-width: 130px; }
+  .player-count-badge { padding: 4px 8px; }
+  .right-panel { width: 100vw; }
+  .left-panel { padding: 10px 12px; }
+  .modal { max-height: calc(100dvh - 32px); display: flex; flex-direction: column; }
+  .modal-body { overflow-y: auto; }
+}
 .mh-card {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: 6px; padding: 8px 10px;

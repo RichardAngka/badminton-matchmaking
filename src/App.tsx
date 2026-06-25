@@ -250,7 +250,7 @@ export function App() {
           {/* Session picker */}
           <div style={{ position: 'relative' }}>
             <button className="btn btn-ghost btn-sm session-select" onClick={() => setPickingDate(true)}>
-              📅 {selectedDate === TODAY ? `Hari Ini (${TODAY})` : selectedDate}
+              📅 {selectedDate.slice(8)}/{selectedDate.slice(5,7)}/{selectedDate.slice(2,4)}{selectedDate === TODAY ? ' ✦' : ''}
             </button>
             {pickingDate && (
               <CalendarPicker
