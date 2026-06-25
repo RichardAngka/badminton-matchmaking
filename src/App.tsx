@@ -207,7 +207,6 @@ export function App() {
   }
 
   // Sessions for picker: always show today first, then past (from Supabase)
-  const pastSessions = sessions.filter(s => s.session_date !== TODAY)
 
   return (
     <div className="app-root">
@@ -235,22 +234,9 @@ export function App() {
         <div className="header-right">
           {/* Session picker */}
           <div style={{ position: 'relative' }}>
-            <select
-              className="session-select"
-              value={selectedDate}
-              onChange={e => {
-                if (e.target.value === '__pick__') { setPickingDate(true); return }
-                setSelectedDate(e.target.value)
-              }}
-            >
-              <option value={TODAY}>Hari Ini ({TODAY})</option>
-              {pastSessions.map(s => (
-                <option key={s.session_date} value={s.session_date}>
-                  {s.session_date} — {s.player_count} pemain · {s.total_shuttles} bola
-                </option>
-              ))}
-              <option value="__pick__">📅 Pilih tanggal…</option>
-            </select>
+            <button className="btn btn-ghost btn-sm session-select" onClick={() => setPickingDate(true)}>
+              📅 {selectedDate === TODAY ? `Hari Ini (${TODAY})` : selectedDate}
+            </button>
             {pickingDate && (
               <CalendarPicker
                 value={selectedDate}
