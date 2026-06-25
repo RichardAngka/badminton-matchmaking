@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { AppState, Player, SkillLevel, Gender, PlayerStatus } from '../types'
+import type { AppState, Match, Player, SkillLevel, Gender, PlayerStatus } from '../types'
 
 interface Props {
   open: boolean
@@ -16,6 +16,7 @@ export function PlayerPanel({ open, onClose, state, onUpdate }: Props) {
   const [gender, setGender] = useState<Gender>('M')
   const [editId, setEditId] = useState<string | null>(null)
   const [editDraft, setEditDraft] = useState({ name: '', skill: 'B1' as SkillLevel, gender: 'M' as Gender })
+  const [profileId, setProfileId] = useState<string | null>(null)
 
   function startEdit(p: Player) {
     setEditId(p.id)
@@ -83,6 +84,10 @@ export function PlayerPanel({ open, onClose, state, onUpdate }: Props) {
   return (
     <>
       {open && <div className="player-panel-backdrop" onClick={onClose} />}
+      {profileId && (() => {
+        const p = state.players.find(pl => pl.id === profileId)!
+        return <PlayerProfileModal player={p} matches={state.matches} allPlayers={state.players} onClose={() => setProfileId(null)} />
+      })()}
       <div className={`player-panel${open ? ' open' : ''}`}>
         <div className="player-panel-header">
           <h2>Pemain ({state.players.filter(p => p.status !== 'Left').length} aktif)</h2>
@@ -118,8 +123,8 @@ export function PlayerPanel({ open, onClose, state, onUpdate }: Props) {
                   </div>
                 </div>
               ) : (
-                <div className="player-info">
-                  <div className="player-item-name">
+                <div className="player-info" style={{ cursor: 'pointer' }} onClick={() => setProfileId(p.id)}>
+                  <div className="player-item-name" style={{ fontWeight: 700 }}>
                     {p.name}
                     <span className={`gender-tag gender-${p.gender}`}>{p.gender === 'F' ? 'W' : 'M'}</span>
                   </div>
@@ -192,5 +197,105 @@ export function PlayerPanel({ open, onClose, state, onUpdate }: Props) {
         </div>
       </div>
     </>
+  )
+}
+
+export const TYPE_COLOR = { XD: '#ce93d8', MD: '#4fc3f7', WD: '#f48fb1' } as const
+type MatchType = 'XD' | 'MD' | 'WD'
+export function teamType(ids: readonly string[], all: Player[]): MatchType {
+  const gs = ids.map(id => all.find(p => p.id === id)?.gender)
+  return gs.every(g => g === 'M') ? 'MD' : gs.every(g => g === 'F') ? 'WD' : 'XD'
+}
+
+function PlayerProfileModal({ player, matches, allPlayers, onClose }: {
+  player: Player
+  matches: Match[]
+  allPlayers: Player[]
+  onClose: () => void
+}) {
+  const n = (id: string) => allPlayers.find(p => p.id === id)?.name ?? '?'
+  const initials = player.name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
+  const playerMatches = matches
+    .filter(m => m.team1.includes(player.id) || m.team2.includes(player.id))
+    .sort((a, b) => b.matchNumber - a.matchNumber)
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 380 }}>
+        <div className="modal-header">
+          <h2>Profil Pemain</h2>
+          <button className="btn btn-ghost btn-sm" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, paddingBottom: 16 }}>
+            <div style={{
+              width: 56, height: 56, borderRadius: '50%',
+              background: 'var(--gold)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 20, fontWeight: 800, color: '#000', flexShrink: 0,
+            }}>
+              {initials}
+            </div>
+            <div>
+              <div style={{ fontSize: 18, fontWeight: 700 }}>{player.name}</div>
+              <div style={{ display: 'flex', gap: 6, marginTop: 4, alignItems: 'center' }}>
+                <span className={`skill-badge skill-${player.skill}`}>{player.skill}</span>
+                <span className={`gender-tag gender-${player.gender}`}>{player.gender === 'F' ? 'W' : 'M'}</span>
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
+                {player.gamesPlayed}x main · Rp {player.totalCost.toLocaleString('id-ID')}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', letterSpacing: 1, marginBottom: 8 }}>
+              RIWAYAT MATCH ({playerMatches.length})
+            </div>
+            {playerMatches.length === 0 ? (
+              <div style={{ color: 'var(--dim)', fontSize: 13, textAlign: 'center', padding: '16px 0' }}>
+                Belum ada match.
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 6 }}>
+                {playerMatches.map(m => {
+                  const inTeam1 = m.team1.includes(player.id)
+                  const t1t = teamType(m.team1, allPlayers)
+                  const t2t = teamType(m.team2, allPlayers)
+                  const hi = (id: string) => (
+                    <span key={id} style={id === player.id ? { color: 'var(--gold)', fontWeight: 700 } : undefined}>
+                      {n(id)}
+                    </span>
+                  )
+                  return (
+                    <div key={m.id} className="mh-card" style={{ borderLeft: `3px solid ${TYPE_COLOR[t1t]}` }}>
+                      <div className="mh-card-header">
+                        <span className="mh-num">#{m.matchNumber}</span>
+                        <span style={{ fontSize: 10, display: 'flex', gap: 2, alignItems: 'center', background: 'var(--bg)', borderRadius: 3, padding: '1px 5px' }}>
+                          <span style={{ color: TYPE_COLOR[t1t], fontWeight: 700 }}>{t1t}</span>
+                          <span style={{ color: 'var(--dim)' }}>vs</span>
+                          <span style={{ color: TYPE_COLOR[t2t], fontWeight: 700 }}>{t2t}</span>
+                        </span>
+                        <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 3, padding: '1px 5px', background: !m.endTime ? 'var(--primary)' : 'var(--border)', color: !m.endTime ? '#000' : 'var(--muted)' }}>
+                          {!m.endTime ? 'Live' : 'Selesai'}
+                        </span>
+                      </div>
+                      {m.shuttlesUsed != null && <span className="mh-bola-tag">{m.shuttlesUsed} bola</span>}
+                      <div className="mh-team" style={{ color: inTeam1 ? 'var(--gold)' : undefined }}>
+                        {hi(m.team1[0])} · {hi(m.team1[1])}
+                      </div>
+                      <div className="mh-vs">vs</div>
+                      <div className="mh-team" style={{ color: !inTeam1 ? '#4fc3f7' : undefined }}>
+                        {hi(m.team2[0])} · {hi(m.team2[1])}
+                      </div>
+                      {m.score && <div className="mh-score">{m.score}</div>}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }

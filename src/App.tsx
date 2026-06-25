@@ -8,7 +8,7 @@ import { findBestFour } from './matchmaker'
 import type { AppState, Player, PlayerStatus, TimeSlot } from './types'
 import { CourtCard } from './components/CourtCard'
 import { LedgerPanel } from './components/LedgerPanel'
-import { PlayerPanel } from './components/PlayerPanel'
+import { PlayerPanel, TYPE_COLOR, teamType } from './components/PlayerPanel'
 import { CalendarPicker } from './components/CalendarPicker'
 
 const TODAY = new Date().toLocaleDateString('en-CA')  // YYYY-MM-DD, valid for date column
@@ -19,11 +19,12 @@ export function App() {
   const [pickingDate, setPickingDate] = useState(false)
   const [playerPanelOpen, setPlayerPanelOpen] = useState(false)
   const [configOpen, setConfigOpen] = useState(false)
-  const [reqMatchOpen, setReqMatchOpen] = useState(false)
   const [queueOpen, setQueueOpen] = useState(false)
+  const [editingQueueIdx, setEditingQueueIdx] = useState<number | null>(null)
   const [logoError, setLogoError] = useState(false)
   const [editingMatch, setEditingMatch] = useState<{ id: string; bola: number; scoreL: string; scoreR: string } | null>(null)
   const [ledgerOpen, setLedgerOpen] = useState(false)
+  const [assignQueueIdx, setAssignQueueIdx] = useState<number | null>(null)
 
   const isHistorical = false // ponytail: was selectedDate !== TODAY, restore to re-lock past dates
 
@@ -50,7 +51,14 @@ export function App() {
 
   const activeCourts   = getActiveCourts(state)
   const activeMatchMap = getActiveMatchMap(state)
+  const allCourtIds    = Array.from({ length: activeCourts }, (_, i) => i + 1)
+  const freeCourts     = allCourtIds.filter(id => !activeMatchMap.has(id))
   const waitingPlayers = state.players.filter(p => p.status === 'Waiting')
+  const waitingInQueue = [...waitingPlayers].filter(p => p.gamesPlayed > 0).sort((a, b) => (a.restingSince ?? 0) - (b.restingSince ?? 0))
+  const waitingNotYet  = waitingPlayers.filter(p => p.gamesPlayed === 0)
+  const queuedIds = new Set((state.pregenerated ?? []).flat())
+  // ponytail: include Playing players so machine can pre-queue full rotation; auto-start skips them until they're Waiting
+  const availableForQueue = state.players.filter(p => p.status !== 'Left' && !queuedIds.has(p.id))
   const activePlayers  = state.players.filter(p => p.status !== 'Left').length
 
   const now    = new Date()
@@ -79,69 +87,41 @@ export function App() {
     mut.mutate({ ...state, pregenerated: (state.pregenerated ?? []).filter((_, i) => i !== idx) })
   }
 
-  function generateMatches() {
+  function replaceInQueue(idx: number, four: [string, string, string, string]) {
     if (isHistorical) return
-    let next = { ...state }
-    for (let courtId = 1; courtId <= activeCourts; courtId++) {
-      if (next.matches.some(m => m.courtId === courtId && !m.endTime)) continue
-      const queue = next.pregenerated ?? []
-      let four: Player[] | null = null
-      let newQueue = queue
-      // use first valid queue item (all 4 still Waiting)
-      for (let qi = 0; qi < queue.length; qi++) {
-        const fourPlayers = queue[qi]
-          .map(id => next.players.find(p => p.id === id && p.status === 'Waiting'))
-          .filter((p): p is Player => !!p)
-        if (fourPlayers.length === 4) {
-          four = fourPlayers
-          newQueue = queue.filter((_, i) => i !== qi)
-          break
-        }
-      }
-      if (!four) {
-        const waiting = next.players.filter(p => p.status === 'Waiting')
-        const { pastPairs, pastOpponents } = buildPastSets(next.matches)
-        four = findBestFour(waiting, pastPairs, pastOpponents)
-        newQueue = queue
-      }
-      if (!four) break
-      const matchNum = next.matchCounter + 1
-      next = {
-        ...next,
-        matchCounter: matchNum,
-        pregenerated: newQueue,
-        matches: [...next.matches, {
-          id: crypto.randomUUID(),
-          matchNumber: matchNum,
-          courtId,
-          team1: [four[0].id, four[1].id],
-          team2: [four[2].id, four[3].id],
-          startTime: Date.now(),
-        }],
-        players: next.players.map(p =>
-          four!.find(f => f.id === p.id) ? { ...p, status: 'Playing' as PlayerStatus } : p
-        ),
-      }
-    }
-    mut.mutate(next)
+    mut.mutate({ ...state, pregenerated: (state.pregenerated ?? []).map((item, i) => i === idx ? four : item) })
   }
 
-  function requestMatch(courtId: number, four: [string, string, string, string]) {
+  function generateOneToQueue() {
     if (isHistorical) return
+    const { pastPairs, pastOpponents } = buildPastSets(state.matches)
+    const four = findBestFour(availableForQueue, pastPairs, pastOpponents)
+    if (!four) return
+    addToQueue([four[0].id, four[1].id, four[2].id, four[3].id])
+  }
+
+  function startFromQueue(queueIdx: number, courtId: number) {
+    if (isHistorical) return
+    const queue = state.pregenerated ?? []
+    const four = queue[queueIdx]
+      ?.map(id => state.players.find(p => p.id === id && p.status === 'Waiting'))
+      .filter((p): p is Player => !!p)
+    if (!four || four.length !== 4) return
     const matchNum = state.matchCounter + 1
     mut.mutate({
       ...state,
       matchCounter: matchNum,
+      pregenerated: queue.filter((_, i) => i !== queueIdx),
       matches: [...state.matches, {
         id: crypto.randomUUID(),
         matchNumber: matchNum,
         courtId,
-        team1: [four[0], four[1]],
-        team2: [four[2], four[3]],
+        team1: [four[0].id, four[1].id],
+        team2: [four[2].id, four[3].id],
         startTime: Date.now(),
       }],
       players: state.players.map(p =>
-        four.includes(p.id) ? { ...p, status: 'Playing' as PlayerStatus } : p
+        four!.find(f => f.id === p.id) ? { ...p, status: 'Playing' as PlayerStatus } : p
       ),
     })
   }
@@ -280,7 +260,7 @@ export function App() {
             )}
           </div>
 
-          <div className="player-count-badge">
+          <div className="player-count-badge" style={{ cursor: 'pointer' }} onClick={() => setPlayerPanelOpen(true)}>
             <strong>{activePlayers}</strong> / {state.targetPlayers}
           </div>
 
@@ -327,18 +307,11 @@ export function App() {
                 ⚡ Antri Match
               </button>
               <button
-                className="btn btn-primary"
-                onClick={generateMatches}
-                disabled={waitingPlayers.length < 4}
+                className="btn btn-primary btn-sm"
+                onClick={generateOneToQueue}
+                disabled={availableForQueue.length < 4}
               >
-                ▶ Generate Match
-              </button>
-              <button
-                className="btn btn-ghost btn-sm"
-                onClick={() => setReqMatchOpen(true)}
-                disabled={waitingPlayers.length < 4}
-              >
-                ✋ Request Match
+                ▶ Antri Match (Machine)
               </button>
               {slot && (
                 <div className="slot-tag">
@@ -351,18 +324,20 @@ export function App() {
 
           <div className="courts-grid">
             {(() => {
-              // assign queue items to empty courts in order
               const queue = state.pregenerated ?? []
               let qi = 0
               return Array.from({ length: activeCourts }, (_, i) => i + 1).map(courtId => {
                 const matchId = activeMatchMap.get(courtId)
                 const match   = matchId ? state.matches.find(m => m.id === matchId) : undefined
                 let upcoming: Player[] | undefined
+                let upcomingIdx: number | undefined
                 if (!match && qi < queue.length) {
-                  const four = queue[qi++]
+                  const four = queue[qi]
                   const players = four.map(id => state.players.find(p => p.id === id)).filter((p): p is Player => !!p)
-                  if (players.length === 4) upcoming = players
+                  if (players.length === 4) { upcoming = players; upcomingIdx = qi }
+                  qi++
                 }
+                const capturedIdx = upcomingIdx
                 return (
                   <CourtCard
                     key={courtId}
@@ -372,6 +347,7 @@ export function App() {
                     upcoming={upcoming}
                     onEndMatch={isHistorical ? undefined : endMatch}
                     onEditPlayers={isHistorical ? undefined : editMatchPlayers}
+                    onStart={!isHistorical && capturedIdx !== undefined ? () => startFromQueue(capturedIdx, courtId) : undefined}
                   />
                 )
               })
@@ -384,17 +360,34 @@ export function App() {
                 <span>Antrian Menunggu</span>
                 <span>{waitingPlayers.length} pemain</span>
               </div>
-              <div className="waiting-grid">
-                {[...waitingPlayers]
-                  .sort((a, b) => (a.restingSince ?? 0) - (b.restingSince ?? 0))
-                  .map(p => (
-                    <div key={p.id} className="waiting-chip">
-                      <div className="status-dot waiting" />
-                      <span className={`skill-badge skill-${p.skill}`}>{p.skill}</span>
-                      {p.name}
-                    </div>
-                  ))}
-              </div>
+              {waitingInQueue.length > 0 && (
+                <>
+                  <div className="waiting-sub-label">Menunggu</div>
+                  <div className="waiting-grid">
+                    {waitingInQueue.map(p => (
+                      <div key={p.id} className="waiting-chip">
+                        <div className="status-dot waiting" />
+                        <span className={`skill-badge skill-${p.skill}`}>{p.skill}</span>
+                        {p.name}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+              {waitingNotYet.length > 0 && (
+                <>
+                  <div className="waiting-sub-label">Belum Main</div>
+                  <div className="waiting-grid">
+                    {waitingNotYet.map(p => (
+                      <div key={p.id} className="waiting-chip">
+                        <div className="status-dot waiting" />
+                        <span className={`skill-badge skill-${p.skill}`}>{p.skill}</span>
+                        {p.name}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           )}
 
@@ -407,18 +400,40 @@ export function App() {
               <div className="match-history-grid">
                 {(state.pregenerated ?? []).map((four, idx) => {
                   const n = (id: string) => state.players.find(p => p.id === id)?.name ?? '?'
+                  const allReady = four.every(id => state.players.find(p => p.id === id)?.status === 'Waiting')
                   return (
-                    <div key={idx} className="mh-card" style={{ borderLeft: '3px solid var(--gold)' }}>
+                    <div key={idx} className="mh-card" style={{ borderLeft: '3px solid var(--gold)', cursor: !isHistorical ? 'pointer' : undefined }}
+                      onClick={() => !isHistorical && setEditingQueueIdx(idx)}>
                       <div className="mh-card-header">
                         <span className="mh-num">#{idx + 1}</span>
                         {!isHistorical && (
-                          <button onClick={() => removeFromQueue(idx)}
+                          <button onClick={e => { e.stopPropagation(); removeFromQueue(idx) }}
                             style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: 13, padding: '0 2px', lineHeight: 1 }}>✕</button>
                         )}
                       </div>
                       <div className="mh-team" style={{ color: 'var(--gold)' }}>{n(four[0])} · {n(four[1])}</div>
                       <div className="mh-vs">vs</div>
                       <div className="mh-team" style={{ color: '#4fc3f7' }}>{n(four[2])} · {n(four[3])}</div>
+                      {!isHistorical && (
+                        <div style={{ display: 'flex', gap: 4, marginTop: 6 }} onClick={e => e.stopPropagation()}>
+                          <button
+                            className="btn btn-primary btn-sm"
+                            style={{ flex: 1, fontSize: 10 }}
+                            disabled={!allReady || freeCourts.length === 0}
+                            onClick={() => startFromQueue(idx, freeCourts[0])}
+                          >
+                            ⚡ Auto
+                          </button>
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            style={{ flex: 1, fontSize: 10 }}
+                            disabled={!allReady || freeCourts.length === 0}
+                            onClick={() => setAssignQueueIdx(idx)}
+                          >
+                            📍 Pilih
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )
                 })}
@@ -438,10 +453,18 @@ export function App() {
                   .sort((a, b) => b.matchNumber - a.matchNumber)
                   .map(m => {
                     const n = (id: string) => state.players.find(p => p.id === id)?.name ?? '?'
+                    const ns = (id: string) => { const pl = state.players.find(p => p.id === id); return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}><span style={{ color: 'var(--text)', fontWeight: 700 }}>{pl?.name ?? '?'}</span><span className={`skill-badge skill-${pl?.skill ?? 'B1'}`}>{pl?.skill ?? '?'}</span></span> }
+                    const t1t = teamType(m.team1, state.players)
+                    const t2t = teamType(m.team2, state.players)
                     return (
-                      <div key={m.id} className="mh-card">
+                      <div key={m.id} className="mh-card" style={{ borderLeft: `3px solid ${TYPE_COLOR[t1t]}` }}>
                         <div className="mh-card-header">
                           <span className="mh-num">#{m.matchNumber}</span>
+                          <span style={{ fontSize: 10, display: 'flex', gap: 2, alignItems: 'center', background: 'var(--bg)', borderRadius: 3, padding: '1px 5px' }}>
+                            <span style={{ color: TYPE_COLOR[t1t], fontWeight: 700 }}>{t1t}</span>
+                            <span style={{ color: 'var(--dim)' }}>vs</span>
+                            <span style={{ color: TYPE_COLOR[t2t], fontWeight: 700 }}>{t2t}</span>
+                          </span>
                           {editingMatch?.id === m.id ? (
                             <input
                               type="number" inputMode="numeric" min={0}
@@ -459,9 +482,9 @@ export function App() {
                             </span>
                           )}
                         </div>
-                        <div className="mh-team">{n(m.team1[0])} · {n(m.team1[1])}</div>
+                        <div className="mh-team">{ns(m.team1[0])} · {ns(m.team1[1])}</div>
                         <div className="mh-vs">vs</div>
-                        <div className="mh-team">{n(m.team2[0])} · {n(m.team2[1])}</div>
+                        <div className="mh-team">{ns(m.team2[0])} · {ns(m.team2[1])}</div>
                         {editingMatch?.id === m.id ? (
                           <>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
@@ -519,21 +542,30 @@ export function App() {
         />
       )}
 
-      {reqMatchOpen && (
-        <RequestMatchModal
-          state={state}
-          activeCourts={activeCourts}
-          activeMatchMap={activeMatchMap}
-          onSubmit={(courtId, four) => { requestMatch(courtId, four); setReqMatchOpen(false) }}
-          onClose={() => setReqMatchOpen(false)}
-        />
-      )}
-
       {queueOpen && (
         <AddToQueueModal
           state={state}
           onSubmit={four => { addToQueue(four); setQueueOpen(false) }}
           onClose={() => setQueueOpen(false)}
+        />
+      )}
+
+      {assignQueueIdx !== null && (
+        <AssignCourtModal
+          allCourts={allCourtIds}
+          freeCourts={freeCourts}
+          onAssign={courtId => { startFromQueue(assignQueueIdx, courtId); setAssignQueueIdx(null) }}
+          onClose={() => setAssignQueueIdx(null)}
+        />
+      )}
+
+      {editingQueueIdx !== null && (
+        <AddToQueueModal
+          state={state}
+          initialSelected={(state.pregenerated ?? [])[editingQueueIdx] ?? []}
+          submitLabel="Simpan Antrian"
+          onSubmit={four => { replaceInQueue(editingQueueIdx, four); setEditingQueueIdx(null) }}
+          onClose={() => setEditingQueueIdx(null)}
         />
       )}
 
@@ -549,6 +581,43 @@ export function App() {
           }}
         />
       )}
+    </div>
+  )
+}
+
+// ── Assign Court modal ───────────────────────────────────────────────────────
+
+function AssignCourtModal({ allCourts, freeCourts, onAssign, onClose }: {
+  allCourts: number[], freeCourts: number[],
+  onAssign: (courtId: number) => void, onClose: () => void
+}) {
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 320 }}>
+        <div className="modal-header">
+          <h2>Pilih Lapangan</h2>
+          <button className="btn btn-ghost btn-sm" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+            {allCourts.map(id => {
+              const free = freeCourts.includes(id)
+              return (
+                <button
+                  key={id}
+                  className={`btn ${free ? 'btn-primary' : 'btn-ghost'}`}
+                  disabled={!free}
+                  style={{ flexDirection: 'column', height: 56, lineHeight: 1.3 }}
+                  onClick={() => onAssign(id)}
+                >
+                  <span>Lapangan {id}</span>
+                  <span style={{ fontSize: 10, opacity: 0.75 }}>{free ? 'Kosong ✓' : 'Sedang dipakai'}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
@@ -668,18 +737,48 @@ function ConfigModal({ state, onSave, onClose, onHardReset }: ConfigModalProps) 
 
 interface AddQueueProps {
   state: AppState
+  initialSelected?: string[]
+  submitLabel?: string
   onSubmit: (four: [string, string, string, string]) => void
   onClose: () => void
 }
 
-function AddToQueueModal({ state, onSubmit, onClose }: AddQueueProps) {
-  const [selected, setSelected] = useState<string[]>([])
+function AddToQueueModal({ state, initialSelected, submitLabel, onSubmit, onClose }: AddQueueProps) {
+  const [selected, setSelected] = useState<string[]>(initialSelected ?? [])
+  const [warning, setWarning] = useState<string | null>(null)
 
-  const waiting = [...state.players].filter(p => p.status === 'Waiting').sort((a, b) => (a.restingSince ?? 0) - (b.restingSince ?? 0))
-  const playing = state.players.filter(p => p.status === 'Playing')
+  const notYetPlayed = [...state.players].filter(p => p.status === 'Waiting' && p.gamesPlayed === 0)
+  const inQueue      = [...state.players].filter(p => p.status === 'Waiting' && p.gamesPlayed > 0).sort((a, b) => (a.restingSince ?? 0) - (b.restingSince ?? 0))
+  const playing      = state.players.filter(p => p.status === 'Playing')
+
+  const pastPairs = new Set(state.matches.flatMap(m => [
+    [...m.team1].sort().join('|'),
+    [...m.team2].sort().join('|'),
+  ]))
+  const pastOpponents = new Set(state.matches.flatMap(m => {
+    const [a, b] = m.team1, [c, d] = m.team2
+    return [[a,c],[a,d],[b,c],[b,d]].map(p => [...p].sort().join('|'))
+  }))
 
   function toggle(id: string) {
+    setWarning(null)
     setSelected(s => s.includes(id) ? s.filter(x => x !== id) : s.length < 4 ? [...s, id] : s)
+  }
+
+  function checkAndSubmit() {
+    if (selected.length !== 4) return
+    const [a, b, c, d] = selected
+    const pk = (x: string, y: string) => [x, y].sort().join('|')
+    const partnerConflict = pastPairs.has(pk(a, b)) || pastPairs.has(pk(c, d))
+    const opponentConflict = [pk(a,c), pk(a,d), pk(b,c), pk(b,d)].some(k => pastOpponents.has(k))
+    if (partnerConflict || opponentConflict) {
+      const msgs = []
+      if (partnerConflict) msgs.push('pasangan ini pernah main bersama')
+      if (opponentConflict) msgs.push('ada pemain yang pernah bertemu sebagai lawan')
+      setWarning(msgs.join(' & '))
+    } else {
+      onSubmit(selected as [string, string, string, string])
+    }
   }
 
   const ready = selected.length === 4
@@ -697,7 +796,7 @@ function AddToQueueModal({ state, onSubmit, onClose }: AddQueueProps) {
               <label className="config-label">
                 Pilih 4 Pemain ({selected.length}/4) — urutan: Tim 1 (1,2) vs Tim 2 (3,4)
               </label>
-              {[{ label: 'Belum Main', list: waiting }, { label: 'Sedang Main', list: playing }].map(({ label, list }) =>
+              {[{ label: 'Belum Main', list: notYetPlayed }, { label: 'Antrian Menunggu', list: inQueue }, { label: 'Sedang Main', list: playing }].map(({ label, list }) =>
                 list.length > 0 && (
                   <div key={label} style={{ marginTop: 8 }}>
                     <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)', letterSpacing: 1, marginBottom: 4 }}>{label.toUpperCase()}</div>
@@ -738,140 +837,34 @@ function AddToQueueModal({ state, onSubmit, onClose }: AddQueueProps) {
               </div>
             )}
 
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button
-                className="btn btn-primary"
-                style={{ flex: 1 }}
-                disabled={!ready}
-                onClick={() => onSubmit(selected as [string, string, string, string])}
-              >
-                Tambah ke Antrian
-              </button>
-              <button className="btn btn-ghost" onClick={onClose}>Batal</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ── Request Match modal ───────────────────────────────────────────────────────
-
-interface ReqMatchProps {
-  state: AppState
-  activeCourts: number
-  activeMatchMap: Map<number, string>
-  onSubmit: (courtId: number, four: [string, string, string, string]) => void
-  onClose: () => void
-}
-
-function RequestMatchModal({ state, activeCourts, activeMatchMap, onSubmit, onClose }: ReqMatchProps) {
-  const emptyCourts = Array.from({ length: activeCourts }, (_, i) => i + 1).filter(id => !activeMatchMap.has(id))
-  const [courtId, setCourtId] = useState(emptyCourts[0] ?? 1)
-  const [selected, setSelected] = useState<string[]>([])
-
-  // ponytail: longest-resting first so picker naturally shows the "due" players at the top
-  const waiting = state.players
-    .filter((p: Player) => p.status === 'Waiting')
-    .sort((a, b) => (a.restingSince ?? 0) - (b.restingSince ?? 0))
-
-  function toggle(id: string) {
-    setSelected(s => s.includes(id) ? s.filter(x => x !== id) : s.length < 4 ? [...s, id] : s)
-  }
-
-  const ready = selected.length === 4 && emptyCourts.includes(courtId)
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2>✋ Request Match</h2>
-          <button className="btn btn-ghost btn-sm" onClick={onClose}>✕</button>
-        </div>
-        <div className="modal-body">
-          <div className="config-form">
-            <div>
-              <label className="config-label">Lapangan</label>
-              {emptyCourts.length === 0 ? (
-                <p style={{ color: 'var(--red)', fontSize: 12 }}>Semua lapangan sedang penuh.</p>
-              ) : (
-                <select
-                  className="config-input"
-                  value={courtId}
-                  onChange={e => setCourtId(+e.target.value)}
-                  style={{ width: '100%' }}
-                >
-                  {emptyCourts.map(id => (
-                    <option key={id} value={id}>Lapangan {id}</option>
-                  ))}
-                </select>
-              )}
-            </div>
-
-            <div>
-              <label className="config-label">
-                Pilih 4 Pemain ({selected.length}/4) — urutan: Team 1 (1,2) vs Team 2 (3,4)
-              </label>
-              {waiting.length < 4 && (
-                <p style={{ color: 'var(--muted)', fontSize: 11 }}>Tidak cukup pemain menunggu.</p>
-              )}
-              <div className="waiting-grid" style={{ marginTop: 6 }}>
-                {waiting.map((p: Player) => {
-                  const idx = selected.indexOf(p.id)
-                  const isTeam1 = idx === 0 || idx === 1
-                  const isTeam2 = idx === 2 || idx === 3
-                  return (
-                    <div
-                      key={p.id}
-                      className="waiting-chip"
-                      onClick={() => toggle(p.id)}
-                      style={{
-                        cursor: 'pointer',
-                        outline: idx >= 0 ? `2px solid ${isTeam1 ? 'var(--gold)' : '#4fc3f7'}` : 'none',
-                        opacity: selected.length === 4 && idx < 0 ? 0.4 : 1,
-                      }}
-                    >
-                      {idx >= 0 && (
-                        <span style={{ fontSize: 10, fontWeight: 800, color: isTeam1 ? 'var(--gold)' : '#4fc3f7', minWidth: 14 }}>
-                          {idx + 1}
-                        </span>
-                      )}
-                      <span className={`skill-badge skill-${p.skill}`}>{p.skill}</span>
-                      {p.name}
-                    </div>
-                  )
-                })}
+            {warning ? (
+              <div style={{ background: 'rgba(255,200,0,0.08)', border: '1px solid var(--gold)', borderRadius: 8, padding: 12 }}>
+                <div style={{ fontSize: 13, color: 'var(--gold)', fontWeight: 700, marginBottom: 6 }}>⚠ Peringatan</div>
+                <div style={{ fontSize: 12, color: 'var(--text)', marginBottom: 10, textTransform: 'capitalize' }}>{warning}. Tetap lanjutkan?</div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => onSubmit(selected as [string, string, string, string])}>
+                    Lanjutkan
+                  </button>
+                  <button className="btn btn-ghost" onClick={() => setWarning(null)}>Ganti Pemain</button>
+                </div>
               </div>
-            </div>
-
-            {selected.length > 0 && (
-              <div style={{ fontSize: 12, color: 'var(--muted)', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <span style={{ color: 'var(--gold)' }}>
-                  Tim 1: {selected.slice(0,2).map(id => state.players.find((p: Player) => p.id === id)?.name ?? '?').join(' · ')}
-                </span>
-                {selected.length > 2 && (
-                  <span style={{ color: '#4fc3f7' }}>
-                    Tim 2: {selected.slice(2,4).map(id => state.players.find((p: Player) => p.id === id)?.name ?? '?').join(' · ')}
-                  </span>
-                )}
+            ) : (
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  className="btn btn-primary"
+                  style={{ flex: 1 }}
+                  disabled={!ready}
+                  onClick={checkAndSubmit}
+                >
+                  {submitLabel ?? 'Tambah ke Antrian'}
+                </button>
+                <button className="btn btn-ghost" onClick={onClose}>Batal</button>
               </div>
             )}
-
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button
-                className="btn btn-primary"
-                style={{ flex: 1 }}
-                disabled={!ready}
-                onClick={() => onSubmit(courtId, selected as [string, string, string, string])}
-              >
-                Mulai Match
-              </button>
-              <button className="btn btn-ghost" onClick={onClose}>Batal</button>
-            </div>
           </div>
         </div>
       </div>
     </div>
   )
 }
+

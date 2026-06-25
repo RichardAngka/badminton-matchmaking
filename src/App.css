@@ -43,9 +43,9 @@
 
   /* Skill levels */
   --sa1: #FFCD5C; --sa1bg: #1F1200;
-  --sa2: #94A8D0; --sa2bg: #0D1A30;
+  --sa2: #60A5FA; --sa2bg: #0F1D38;
   --sb1: #00C876; --sb1bg: #001A10;
-  --sb2: #3F5A7A; --sb2bg: #07101C;
+  --sb2: #F472B6; --sb2bg: #2D1025;
 
   --radius: 10px;
   --radius-sm: 6px;
@@ -318,9 +318,9 @@ body {
   flex-shrink: 0;
 }
 .skill-A1 { background: var(--sa1bg); color: var(--sa1); border: 1px solid rgba(255,205,92,.35); }
-.skill-A2 { background: var(--sa2bg); color: var(--sa2); border: 1px solid rgba(148,168,208,.25); }
+.skill-A2 { background: var(--sa2bg); color: var(--sa2); border: 1px solid rgba(96,165,250,.25); }
 .skill-B1 { background: var(--sb1bg); color: var(--sb1); border: 1px solid rgba(0,200,118,.25); }
-.skill-B2 { background: var(--sb2bg); color: var(--sb2); border: 1px solid rgba(63,90,122,.5); }
+.skill-B2 { background: var(--sb2bg); color: var(--sb2); border: 1px solid rgba(244,114,182,.3); }
 
 .gender-tag {
   font-size: 9px; padding: 1px 4px; border-radius: 3px; font-weight: 800; flex-shrink: 0;
@@ -516,6 +516,12 @@ body {
 .player-panel-header h2 { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; color: var(--text); }
 
 .player-list { flex: 1; overflow-y: auto; }
+
+.waiting-sub-label {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em;
+  color: var(--muted);
+  padding: 8px 0 4px;
+}
 
 .player-item {
   display: flex; align-items: center;
