@@ -575,7 +575,7 @@ export function App() {
           onSave={s => { mut.mutate(s); setConfigOpen(false) }}
           onClose={() => setConfigOpen(false)}
           onHardReset={async () => {
-            if (!confirm('HARD RESET: hapus SEMUA data (pemain, pertandingan, riwayat)? Ini tidak bisa dibatalkan.')) return
+            if (!confirm(`HARD RESET: hapus semua data hari ini (${TODAY})? Ini tidak bisa dibatalkan.`)) return
             await persistState(TODAY, DEFAULT_STATE)
             window.location.reload()
           }}
