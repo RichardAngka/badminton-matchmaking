@@ -185,12 +185,17 @@ export function PlayerPanel({ open, onClose, state, onUpdate, inline }: Props) {
           )}
           <div className="player-actions">
             {editId !== p.id && (
-              <Button variant="ghost" size="sm" onClick={() => startEdit(p)} title="Edit pemain">✏</Button>
+              <Button
+                variant="tertiary"
+                size="icon-lg"
+                onClick={() => startEdit(p)}
+                title="Edit pemain"
+              >✏</Button>
             )}
             {p.status !== 'Playing' && editId !== p.id && (
               <Button
-                size="sm"
-                variant={p.status === 'Left' ? 'default' : 'ghost'}
+                variant={p.status === 'Left' ? 'secondary' : 'tertiary'}
+                size="icon-lg"
                 onClick={() => markLeft(p)}
                 title={p.status === 'Left' ? 'Check-in kembali' : 'Tandai pulang'}
               >
@@ -198,7 +203,12 @@ export function PlayerPanel({ open, onClose, state, onUpdate, inline }: Props) {
               </Button>
             )}
             {p.status !== 'Playing' && editId !== p.id && (
-              <Button variant="ghost" size="sm" onClick={() => deletePlayer(p.id)} className="text-destructive" title="Hapus pemain">✕</Button>
+              <Button
+                variant="destructive"
+                size="icon-lg"
+                onClick={() => deletePlayer(p.id)}
+                title="Hapus pemain"
+              >✕</Button>
             )}
           </div>
         </div>
@@ -425,7 +435,7 @@ function PlayerProfileModal({ player, matches, allPlayers, onClose }: {
                   return (
                     <div key={m.id} className="mh-card" style={{ borderLeft: `3px solid ${TYPE_COLOR[t1t]}` }}>
                       <div className="mh-card-header">
-                        <span className="mh-num">#{m.matchNumber}</span>
+                        <span className="mh-num">#{m.matchNumber}</span>  
                         <span style={{ fontSize: 10, display: 'flex', gap: 2, alignItems: 'center', background: 'var(--bg)', borderRadius: 3, padding: '1px 5px' }}>
                           <span style={{ color: TYPE_COLOR[t1t], fontWeight: 700 }}>{t1t}</span>
                           <span style={{ color: 'var(--dim)' }}>vs</span>
