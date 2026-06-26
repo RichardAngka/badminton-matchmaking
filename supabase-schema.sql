@@ -23,3 +23,7 @@ ALTER TABLE sessions ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "public read"   ON sessions FOR SELECT USING (true);
 CREATE POLICY "public insert" ON sessions FOR INSERT WITH CHECK (true);
 CREATE POLICY "public update" ON sessions FOR UPDATE USING (true);
+
+-- Enable Realtime so postgres_changes events are sent to WebSocket subscribers
+ALTER PUBLICATION supabase_realtime ADD TABLE sessions;
+

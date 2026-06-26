@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -53,8 +53,23 @@ export function App() {
     queryKey: ['state', selectedDate],
     queryFn: () => loadStateForDate(selectedDate),
     staleTime: isHistorical ? Infinity : 30_000,
-    refetchInterval: isHistorical ? false : 600_000,
+    // Fallback poll every 60s in case Realtime WebSocket drops
+    refetchInterval: isHistorical ? false : 60_000,
   })
+
+  // Supabase Realtime: invalidate cache the moment any other client saves changes
+  useEffect(() => {
+    if (!supabase || isHistorical) return
+    const channel = supabase
+      .channel(`session-${selectedDate}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'sessions', filter: `session_date=eq.${selectedDate}` },
+        () => { qc.invalidateQueries({ queryKey: ['state', selectedDate] }) },
+      )
+      .subscribe()
+    return () => { supabase?.removeChannel(channel) }
+  }, [selectedDate, isHistorical, qc])
 
   // Session list from Supabase for the history picker
   const { data: sessions = [], status: dbStatus } = useQuery({
