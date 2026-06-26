@@ -336,11 +336,11 @@ export function PlayerPanel({ open, onClose, state, onUpdate, inline }: Props) {
 
         <div style={{ paddingBottom: 96 }}>{playerList}</div>
 
-        {/* Floating + button, left-anchored */}
+        {/* Floating + button, right-anchored */}
         <button
           onClick={() => setShowForm(true)}
           style={{
-            position: 'fixed', bottom: 80, left: 20,
+            position: 'fixed', bottom: 80, right: 20,
             width: 52, height: 52, borderRadius: '50%',
             background: 'var(--gold)', color: '#000',
             border: 'none', fontSize: 26, lineHeight: 1,
