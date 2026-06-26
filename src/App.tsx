@@ -25,6 +25,7 @@ export function App() {
   const [editingMatch, setEditingMatch] = useState<{ id: string; bola: number; scoreL: string; scoreR: string } | null>(null)
   const [ledgerOpen, setLedgerOpen] = useState(false)
   const [assignQueueIdx, setAssignQueueIdx] = useState<number | null>(null)
+  const [waitingTab, setWaitingTab] = useState<'menunggu' | 'antrian'>('menunggu')
 
   const isHistorical = false // ponytail: was selectedDate !== TODAY, restore to re-lock past dates
 
@@ -53,10 +54,11 @@ export function App() {
   const activeMatchMap = getActiveMatchMap(state)
   const allCourtIds    = Array.from({ length: activeCourts }, (_, i) => i + 1)
   const freeCourts     = allCourtIds.filter(id => !activeMatchMap.has(id))
+  const queuedIds      = new Set((state.pregenerated ?? []).flat())
   const waitingPlayers = state.players.filter(p => p.status === 'Waiting')
-  const waitingInQueue = [...waitingPlayers].filter(p => p.gamesPlayed > 0).sort((a, b) => (a.restingSince ?? 0) - (b.restingSince ?? 0))
-  const waitingNotYet  = waitingPlayers.filter(p => p.gamesPlayed === 0)
-  const queuedIds = new Set((state.pregenerated ?? []).flat())
+  const waitingQueued  = [...waitingPlayers].filter(p => queuedIds.has(p.id))
+  const waitingInQueue = [...waitingPlayers].filter(p => p.gamesPlayed > 0 && !queuedIds.has(p.id)).sort((a, b) => (a.restingSince ?? 0) - (b.restingSince ?? 0))
+  const waitingNotYet  = waitingPlayers.filter(p => p.gamesPlayed === 0 && !queuedIds.has(p.id))
   // ponytail: include Playing players so machine can pre-queue full rotation; auto-start skips them until they're Waiting
   const availableForQueue = state.players.filter(p => p.status !== 'Left' && !queuedIds.has(p.id))
   const activePlayers  = state.players.filter(p => p.status !== 'Left').length
@@ -180,7 +182,7 @@ export function App() {
     const match = state.matches.find(m => m.id === matchId)!
     const costPerPlayer = Math.round((shuttlesUsed * state.shuttlePrice) / 4)
     const playerIds = new Set([...match.team1, ...match.team2])
-    let next: AppState = {
+    mut.mutate({
       ...state,
       matches: state.matches.map(m =>
         m.id === matchId ? { ...m, endTime: Date.now(), shuttlesUsed, score } : m
@@ -190,35 +192,7 @@ export function App() {
           ? { ...p, status: 'Waiting' as PlayerStatus, restingSince: Date.now(), totalCost: p.totalCost + costPerPlayer, gamesPlayed: p.gamesPlayed + 1 }
           : p
       ),
-    }
-    // auto-start first valid queued match on the freed court (queue-only, no fallback)
-    const queue = next.pregenerated ?? []
-    for (let qi = 0; qi < queue.length; qi++) {
-      const fourPlayers = queue[qi]
-        .map(id => next.players.find(p => p.id === id && p.status === 'Waiting'))
-        .filter((p): p is Player => !!p)
-      if (fourPlayers.length === 4) {
-        const matchNum = next.matchCounter + 1
-        next = {
-          ...next,
-          matchCounter: matchNum,
-          pregenerated: queue.filter((_, i) => i !== qi),
-          matches: [...next.matches, {
-            id: crypto.randomUUID(),
-            matchNumber: matchNum,
-            courtId: match.courtId,
-            team1: [fourPlayers[0].id, fourPlayers[1].id],
-            team2: [fourPlayers[2].id, fourPlayers[3].id],
-            startTime: Date.now(),
-          }],
-          players: next.players.map(p =>
-            fourPlayers.find(f => f.id === p.id) ? { ...p, status: 'Playing' as PlayerStatus } : p
-          ),
-        }
-        break
-      }
-    }
-    mut.mutate(next)
+    })
   }
 
   // Sessions for picker: always show today first, then past (from Supabase)
@@ -361,11 +335,20 @@ export function App() {
                 <span>Antrian Menunggu</span>
                 <span>{waitingPlayers.length} pemain</span>
               </div>
-              {waitingInQueue.length > 0 && (
+              {(waitingInQueue.length > 0 || waitingQueued.length > 0) && (
                 <>
-                  <div className="waiting-sub-label">Menunggu</div>
+                  <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
+                    <button
+                      className={`btn btn-sm${waitingTab === 'menunggu' ? ' btn-primary' : ' btn-ghost'}`}
+                      onClick={() => setWaitingTab('menunggu')}
+                    >Menunggu ({waitingInQueue.length})</button>
+                    <button
+                      className={`btn btn-sm${waitingTab === 'antrian' ? ' btn-primary' : ' btn-ghost'}`}
+                      onClick={() => setWaitingTab('antrian')}
+                    >Sedang Dalam Antrian ({waitingQueued.length})</button>
+                  </div>
                   <div className="waiting-grid">
-                    {waitingInQueue.map(p => (
+                    {(waitingTab === 'menunggu' ? waitingInQueue : waitingQueued).map(p => (
                       <div key={p.id} className="waiting-chip">
                         <div className="status-dot waiting" />
                         <span className={`skill-badge skill-${p.skill}`}>{p.skill}</span>
@@ -421,17 +404,9 @@ export function App() {
                             className="btn btn-primary btn-sm"
                             style={{ flex: 1, fontSize: 10 }}
                             disabled={!allReady || freeCourts.length === 0}
-                            onClick={() => startFromQueue(idx, freeCourts[0])}
+                            onClick={() => freeCourts.length === 1 ? startFromQueue(idx, freeCourts[0]) : setAssignQueueIdx(idx)}
                           >
-                            ⚡ Auto
-                          </button>
-                          <button
-                            className="btn btn-ghost btn-sm"
-                            style={{ flex: 1, fontSize: 10 }}
-                            disabled={!allReady || freeCourts.length === 0}
-                            onClick={() => setAssignQueueIdx(idx)}
-                          >
-                            📍 Pilih
+                            📍 Mulai di Lapangan
                           </button>
                         </div>
                       )}
@@ -718,10 +693,13 @@ interface AddQueueProps {
 function AddToQueueModal({ state, initialSelected, submitLabel, onSubmit, onClose }: AddQueueProps) {
   const [selected, setSelected] = useState<string[]>(initialSelected ?? [])
   const [warning, setWarning] = useState<string | null>(null)
+  const [modalTab, setModalTab] = useState<'menunggu' | 'antrian'>('menunggu')
 
-  const notYetPlayed = [...state.players].filter(p => p.status === 'Waiting' && p.gamesPlayed === 0)
-  const inQueue      = [...state.players].filter(p => p.status === 'Waiting' && p.gamesPlayed > 0).sort((a, b) => (a.restingSince ?? 0) - (b.restingSince ?? 0))
-  const playing      = state.players.filter(p => p.status === 'Playing')
+  const queuedIds     = new Set((state.pregenerated ?? []).flat())
+  const notYetPlayed  = [...state.players].filter(p => p.status === 'Waiting' && p.gamesPlayed === 0 && !queuedIds.has(p.id))
+  const inQueue       = [...state.players].filter(p => p.status === 'Waiting' && p.gamesPlayed > 0 && !queuedIds.has(p.id)).sort((a, b) => (a.restingSince ?? 0) - (b.restingSince ?? 0))
+  const inQueueQueued = [...state.players].filter(p => p.status === 'Waiting' && queuedIds.has(p.id))
+  const playing       = state.players.filter(p => p.status === 'Playing')
 
   const pastPairs = new Set(state.matches.flatMap(m => [
     [...m.team1].sort().join('|'),
@@ -768,32 +746,55 @@ function AddToQueueModal({ state, initialSelected, submitLabel, onSubmit, onClos
               <label className="config-label">
                 Pilih 4 Pemain ({selected.length}/4) — urutan: Tim 1 (1,2) vs Tim 2 (3,4)
               </label>
-              {[{ label: 'Belum Main', list: notYetPlayed }, { label: 'Antrian Menunggu', list: inQueue }, { label: 'Sedang Main', list: playing }].map(({ label, list }) =>
-                list.length > 0 && (
-                  <div key={label} style={{ marginTop: 8 }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)', letterSpacing: 1, marginBottom: 4 }}>{label.toUpperCase()}</div>
-                    <div className="waiting-grid">
-                      {list.map(p => {
-                        const idx = selected.indexOf(p.id)
-                        const isTeam1 = idx === 0 || idx === 1
-                        return (
-                          <div key={p.id} className="waiting-chip" onClick={() => toggle(p.id)}
-                            style={{
-                              cursor: 'pointer',
-                              outline: idx >= 0 ? `2px solid ${isTeam1 ? 'var(--gold)' : '#4fc3f7'}` : 'none',
-                              opacity: selected.length === 4 && idx < 0 ? 0.4 : 1,
-                            }}>
-                            {idx >= 0 && <span style={{ fontSize: 10, fontWeight: 800, color: isTeam1 ? 'var(--gold)' : '#4fc3f7', minWidth: 14 }}>{idx + 1}</span>}
-                            <div className={`status-dot ${p.status === 'Playing' ? 'playing' : 'waiting'}`} />
-                            <span className={`skill-badge skill-${p.skill}`}>{p.skill}</span>
-                            {p.name}
-                          </div>
-                        )
-                      })}
+              {(() => {
+                const chip = (p: Player) => {
+                  const idx = selected.indexOf(p.id)
+                  const isTeam1 = idx === 0 || idx === 1
+                  return (
+                    <div key={p.id} className="waiting-chip" onClick={() => toggle(p.id)}
+                      style={{
+                        cursor: 'pointer',
+                        outline: idx >= 0 ? `2px solid ${isTeam1 ? 'var(--gold)' : '#4fc3f7'}` : 'none',
+                        opacity: selected.length === 4 && idx < 0 ? 0.4 : 1,
+                      }}>
+                      {idx >= 0 && <span style={{ fontSize: 10, fontWeight: 800, color: isTeam1 ? 'var(--gold)' : '#4fc3f7', minWidth: 14 }}>{idx + 1}</span>}
+                      <div className={`status-dot ${p.status === 'Playing' ? 'playing' : 'waiting'}`} />
+                      <span className={`skill-badge skill-${p.skill}`}>{p.skill}</span>
+                      {p.name}
                     </div>
-                  </div>
+                  )
+                }
+                const sub = (label: string) => <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)', letterSpacing: 1, marginBottom: 4 }}>{label}</div>
+                return (
+                  <>
+                    {notYetPlayed.length > 0 && (
+                      <div style={{ marginTop: 8 }}>
+                        {sub('BELUM MAIN')}
+                        <div className="waiting-grid">{notYetPlayed.map(chip)}</div>
+                      </div>
+                    )}
+                    {(inQueue.length > 0 || inQueueQueued.length > 0) && (
+                      <div style={{ marginTop: 8 }}>
+                        <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
+                          <button className={`btn btn-sm${modalTab === 'menunggu' ? ' btn-primary' : ' btn-ghost'}`} onClick={() => setModalTab('menunggu')}>
+                            Menunggu ({inQueue.length})
+                          </button>
+                          <button className={`btn btn-sm${modalTab === 'antrian' ? ' btn-primary' : ' btn-ghost'}`} onClick={() => setModalTab('antrian')}>
+                            Sedang Dalam Antrian ({inQueueQueued.length})
+                          </button>
+                        </div>
+                        <div className="waiting-grid">{(modalTab === 'menunggu' ? inQueue : inQueueQueued).map(chip)}</div>
+                      </div>
+                    )}
+                    {playing.length > 0 && (
+                      <div style={{ marginTop: 8 }}>
+                        {sub('SEDANG MAIN')}
+                        <div className="waiting-grid">{playing.map(chip)}</div>
+                      </div>
+                    )}
+                  </>
                 )
-              )}
+              })()}
             </div>
 
             {selected.length > 0 && (

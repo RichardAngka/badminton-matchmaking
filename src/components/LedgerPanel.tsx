@@ -20,18 +20,23 @@ function exportXLSX(state: AppState) {
     }),
   ]
 
+  const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, 'id')
+  const members = [...state.players].filter(p => p.type === 'member').sort(byName)
+  const harians = [...state.players].filter(p => p.type === 'harian').sort(byName)
+
   const ledgerSheet = [
-    ['Rank', 'Nama Pemain', 'Total Biaya (IDR)', 'Games'],
-    ...[...state.players]
-      .filter(p => p.gamesPlayed > 0 || p.totalCost > 0)
-      .sort((a, b) => b.totalCost - a.totalCost)
-      .map((p, i) => [i + 1, p.name, p.totalCost, `${p.gamesPlayed}x main`]),
+    ['No', 'Nama', 'Harian Price', 'Ball Usage Price', 'Total to Pay'],
+    ...members.map((p, i) => [i + 1, p.name, 0, p.totalCost, p.totalCost]),
+    [],
+    ...harians.map((p, i) => [i + 1, p.name, state.harianFee, p.totalCost, state.harianFee + p.totalCost]),
   ]
 
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(matchSheet), 'Match Log')
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(ledgerSheet), 'Ledger')
-  XLSX.writeFile(wb, `acematch-${state.sessionDate.replace(/\//g, '-')}.xlsx`)
+  const [y, mo, d] = state.sessionDate.split('-').map(Number)
+  const day = ['min','sen','sel','rab','kam','jum','sab'][new Date(y, mo - 1, d).getDay()]
+  XLSX.writeFile(wb, `pbsor-${day}-${state.sessionDate}.xlsx`)
 }
 
 export function LedgerPanel({ state, open, onClose }: Props) {
