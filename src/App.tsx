@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   loadStateForDate, persistState, getActiveCourts, getActiveMatchMap, DEFAULT_STATE,
@@ -17,7 +18,6 @@ export function App() {
   const qc = useQueryClient()
   const [selectedDate, setSelectedDate] = useState(TODAY)
   const [pickingDate, setPickingDate] = useState(false)
-  const [playerPanelOpen, setPlayerPanelOpen] = useState(false)
   const [configOpen, setConfigOpen] = useState(false)
   const [queueOpen, setQueueOpen] = useState(false)
   const [editingQueueIdx, setEditingQueueIdx] = useState<number | null>(null)
@@ -26,6 +26,25 @@ export function App() {
   const [ledgerOpen, setLedgerOpen] = useState(false)
   const [assignQueueIdx, setAssignQueueIdx] = useState<number | null>(null)
   const [waitingTab, setWaitingTab] = useState<'menunggu' | 'antrian'>('menunggu')
+  const { pathname } = useLocation()
+  const navigate = useNavigate()
+  type Tab = 'lapangan' | 'menunggu' | 'antrian' | 'riwayat' | 'pemain'
+  const ROUTE_TAB: Record<string, Tab> = {
+    '/': 'lapangan',
+    '/waiting-player': 'menunggu',
+    '/waiting-list': 'antrian',
+    '/history': 'riwayat',
+    '/player': 'pemain',
+  }
+  const TAB_ROUTE: Record<Tab, string> = {
+    lapangan: '/',
+    menunggu: '/waiting-player',
+    antrian: '/waiting-list',
+    riwayat: '/history',
+    pemain: '/player',
+  }
+  const mainTab: Tab = ROUTE_TAB[pathname] ?? 'lapangan'
+  const setMainTab = (tab: Tab) => navigate(TAB_ROUTE[tab])
 
   const isHistorical = false // ponytail: was selectedDate !== TODAY, restore to re-lock past dates
 
@@ -197,96 +216,101 @@ export function App() {
 
   // Sessions for picker: always show today first, then past (from Supabase)
 
+  const finished = state.matches.filter(m => m.endTime)
+  const fmtDate = `${selectedDate.slice(8)}/${selectedDate.slice(5,7)}/${selectedDate.slice(2,4)}`
+  const TAB_META: Record<typeof mainTab, { title: string; sub: string }> = {
+    lapangan: { title: 'Dashboard', sub: 'Lapangan aktif & aktivitas terkini' },
+    menunggu: { title: 'Menunggu', sub: 'Pemain siap masuk antrian' },
+    antrian:  { title: 'Antrian', sub: 'Match yang sudah disusun' },
+    riwayat:  { title: 'Riwayat', sub: 'Pertandingan selesai hari ini' },
+    pemain:   { title: 'Pemain', sub: 'Kelola pemain & check-in' },
+  }
+  const meta = TAB_META[mainTab]
+  const nm = (id: string) => state.players.find(p => p.id === id)?.name ?? '?'
+  const fmtDur = (ms: number) => { const s = Math.floor(ms / 1000); return `${String(Math.floor(s / 60)).padStart(2,'0')}:${String(s % 60).padStart(2,'0')}` }
+
   return (
-    <div className="app-root">
-      {/* ── Header ── */}
-      <header className="header">
-        {logoError ? (
-          <div className="header-logo-fallback">SOR</div>
-        ) : (
-          <img
-            className="header-logo"
-            src="/Logo PB SOR.png"
-            alt="PB. SOR"
-            onError={() => setLogoError(true)}
-          />
-        )}
-
-        <div className="header-title">
-          <h1>
-            ORDER TO PLAY OF THE DAY!!!!&ensp;
-            (Tanggal:&nbsp;<span className="date-part">{state.sessionDate}</span>)&ensp;—&ensp;
-            <span className="club-part">PB. SOR</span>
-          </h1>
+    <>
+    <div className="app-shell">
+      {/* ── Sidebar ── */}
+      <aside className="sidebar">
+        <div className="sidebar-brand">
+          {logoError
+            ? <div className="brand-logo-fallback">SOR</div>
+            : <img className="brand-logo" src="/Logo PB SOR.png" alt="PB. SOR" onError={() => setLogoError(true)} />}
+          <div className="brand-text">
+            <span className="brand-name">PB SOR</span>
+            <span className="brand-sub">Matchmaking</span>
+          </div>
         </div>
-
-        <div className="header-right">
-          {/* Session picker */}
-          <div style={{ position: 'relative' }}>
-            <button className="btn btn-ghost btn-sm session-select" onClick={() => setPickingDate(true)}>
-              📅 {selectedDate.slice(8)}/{selectedDate.slice(5,7)}/{selectedDate.slice(2,4)}{selectedDate === TODAY ? ' ✦' : ''}
-            </button>
-            {pickingDate && (
-              <CalendarPicker
-                value={selectedDate}
-                onSelect={setSelectedDate}
-                onClose={() => setPickingDate(false)}
-              />
-            )}
-          </div>
-
-          <div className="player-count-badge" style={{ cursor: 'pointer' }} onClick={() => setPlayerPanelOpen(true)}>
-            <strong>{activePlayers}</strong> / {state.targetPlayers}
-          </div>
-
-          <div className="db-badge" title={
-            !supabase ? 'Supabase tidak dikonfigurasi' :
-            dbStatus === 'error' ? 'Gagal terhubung ke Supabase' :
-            dbStatus === 'success' ? 'Terhubung ke Supabase' : 'Menghubungkan…'
-          }>
-            <div className={`db-dot ${!supabase || dbStatus === 'error' ? 'off' : dbStatus === 'success' ? 'on' : 'pending'}`} />
-            {!supabase ? 'Local' : dbStatus === 'error' ? 'DB ✗' : dbStatus === 'success' ? 'DB' : 'DB…'}
-          </div>
-
-          <button className="btn btn-ghost btn-sm" onClick={() => setLedgerOpen(true)} title="Biaya Bola">💰</button>
-          <button className="btn btn-ghost btn-sm" onClick={() => setConfigOpen(true)} title="Konfigurasi">⚙</button>
-        </div>
-      </header>
-
-      {/* Historical session banner */}
-      {isHistorical && (
-        <div className="history-banner">
-          👁&nbsp; Melihat sesi {selectedDate} — read only
-          &nbsp;·&nbsp;
-          <button
-            style={{ background: 'none', border: 'none', color: 'var(--gold)', cursor: 'pointer', fontWeight: 700, fontSize: 12, fontFamily: 'inherit', padding: 0 }}
-            onClick={() => setSelectedDate(TODAY)}
-          >
-            Kembali ke hari ini →
+        <nav className="sidebar-nav">
+          <button className={`nav-item${mainTab === 'lapangan' ? ' active' : ''}`} onClick={() => setMainTab('lapangan')}>
+            <Icon name="grid" /><span>Dashboard</span>
+            {activeMatchMap.size > 0 && <span className="nav-count">{activeMatchMap.size}</span>}
           </button>
-        </div>
-      )}
+          <button className={`nav-item${mainTab === 'menunggu' ? ' active' : ''}`} onClick={() => setMainTab('menunggu')}>
+            <Icon name="clock" /><span>Menunggu</span>
+            {waitingPlayers.length > 0 && <span className="nav-count">{waitingPlayers.length}</span>}
+          </button>
+          <button className={`nav-item${mainTab === 'antrian' ? ' active' : ''}`} onClick={() => setMainTab('antrian')}>
+            <Icon name="bolt" /><span>Antrian</span>
+            {(state.pregenerated ?? []).length > 0 && <span className="nav-count">{(state.pregenerated ?? []).length}</span>}
+          </button>
+          <button className={`nav-item${mainTab === 'riwayat' ? ' active' : ''}`} onClick={() => setMainTab('riwayat')}>
+            <Icon name="history" /><span>Riwayat</span>
+            {finished.length > 0 && <span className="nav-count">{finished.length}</span>}
+          </button>
+          <button className={`nav-item${mainTab === 'pemain' ? ' active' : ''}`} onClick={() => setMainTab('pemain')}>
+            <Icon name="users" /><span>Pemain</span>
+            {state.players.filter(p => p.status !== 'Left').length > 0 && <span className="nav-count">{state.players.filter(p => p.status !== 'Left').length}</span>}
+          </button>
+        </nav>
+      </aside>
 
-      <div className="main-layout">
-        {/* ── Left panel ── */}
-        <div className="left-panel">
-          {!isHistorical && (
+      {/* ── Workspace ── */}
+      <div className="workspace">
+        <header className="topbar">
+          <div className="topbar-title">
+            <h1>{meta.title}</h1>
+            <span className="topbar-sub">{meta.sub}</span>
+          </div>
+          <div className="topbar-actions">
+            <div style={{ position: 'relative' }}>
+              <button className="chip-btn" onClick={() => setPickingDate(true)}>
+                📅 <span className="full-date">{fmtDate}{selectedDate === TODAY ? ' ✦' : ''}</span>
+              </button>
+              {pickingDate && (
+                <CalendarPicker value={selectedDate} onSelect={setSelectedDate} onClose={() => setPickingDate(false)} />
+              )}
+            </div>
+            <div className="player-count-badge" style={{ cursor: 'pointer' }} onClick={() => setMainTab('pemain')}>
+              <strong>{activePlayers}</strong> / {state.targetPlayers}
+            </div>
+            <div className="db-badge" title={
+              !supabase ? 'Supabase tidak dikonfigurasi' :
+              dbStatus === 'error' ? 'Gagal terhubung ke Supabase' :
+              dbStatus === 'success' ? 'Terhubung ke Supabase' : 'Menghubungkan…'
+            }>
+              <div className={`db-dot ${!supabase || dbStatus === 'error' ? 'off' : dbStatus === 'success' ? 'on' : 'pending'}`} />
+              {!supabase ? 'Local' : dbStatus === 'error' ? 'DB ✗' : dbStatus === 'success' ? 'DB' : 'DB…'}
+            </div>
+            <button className="icon-btn" onClick={() => setLedgerOpen(true)} title="Live Ledger"><Icon name="wallet" /></button>
+            <button className="icon-btn" onClick={() => setConfigOpen(true)} title="Konfigurasi"><Icon name="gear" /></button>
+            <button className="btn btn-primary new-match-btn" onClick={() => setQueueOpen(true)} disabled={isHistorical}>
+              <Icon name="plus" /> New Match
+            </button>
+          </div>
+        </header>
+
+        <div className="workspace-body">
+          {!isHistorical && (mainTab === 'lapangan' || mainTab === 'antrian') && (
             <div className="controls-bar">
-              <button className="btn btn-ghost btn-sm" onClick={() => setPlayerPanelOpen(true)}>
-                + Kelola Pemain
-              </button>
-              <button
-                className="btn btn-ghost btn-sm"
-                onClick={() => setQueueOpen(true)}
-              >
-                ⚡ Antri Match
-              </button>
               <button
                 className="btn btn-primary btn-sm"
                 onClick={generateOneToQueue}
                 disabled={availableForQueue.length < 4}
               >
-                ▶ Antri Match (Machine)
+                ⚡ Antri Otomatis
               </button>
               {slot && (
                 <div className="slot-tag">
@@ -297,39 +321,84 @@ export function App() {
             </div>
           )}
 
-          <div className="courts-grid">
-            {(() => {
-              const queue = state.pregenerated ?? []
-              let qi = 0
-              return Array.from({ length: activeCourts }, (_, i) => i + 1).map(courtId => {
-                const matchId = activeMatchMap.get(courtId)
-                const match   = matchId ? state.matches.find(m => m.id === matchId) : undefined
-                let upcoming: Player[] | undefined
-                let upcomingIdx: number | undefined
-                if (!match && qi < queue.length) {
-                  const four = queue[qi]
-                  const players = four.map(id => state.players.find(p => p.id === id)).filter((p): p is Player => !!p)
-                  if (players.length === 4) { upcoming = players; upcomingIdx = qi }
-                  qi++
-                }
-                const capturedIdx = upcomingIdx
-                return (
-                  <CourtCard
-                    key={courtId}
-                    courtId={courtId}
-                    match={match}
-                    players={state.players}
-                    upcoming={upcoming}
-                    onEndMatch={isHistorical ? undefined : endMatch}
-                    onEditPlayers={isHistorical ? undefined : editMatchPlayers}
-                    onStart={!isHistorical && capturedIdx !== undefined ? () => startFromQueue(capturedIdx, courtId) : undefined}
-                  />
-                )
-              })
-            })()}
-          </div>
+          {mainTab === 'lapangan' && (
+            <>
+            <section className="ws-section">
+              <div className="ws-head">
+                <div className="ws-head-l">
+                  <h2>Active Courts</h2>
+                  <span className="ws-head-sub">Live matches in progress</span>
+                </div>
+                <span className="ws-pill">{activeMatchMap.size} / {activeCourts} aktif</span>
+              </div>
+              <div className="courts-grid">
+                {(() => {
+                  const queue = state.pregenerated ?? []
+                  let qi = 0
+                  return Array.from({ length: activeCourts }, (_, i) => i + 1).map(courtId => {
+                    const matchId = activeMatchMap.get(courtId)
+                    const match   = matchId ? state.matches.find(m => m.id === matchId) : undefined
+                    let upcoming: Player[] | undefined
+                    let upcomingIdx: number | undefined
+                    if (!match && qi < queue.length) {
+                      const four = queue[qi]
+                      const players = four.map(id => state.players.find(p => p.id === id)).filter((p): p is Player => !!p)
+                      if (players.length === 4) { upcoming = players; upcomingIdx = qi }
+                      qi++
+                    }
+                    const capturedIdx = upcomingIdx
+                    return (
+                      <CourtCard
+                        key={courtId}
+                        courtId={courtId}
+                        match={match}
+                        players={state.players}
+                        upcoming={upcoming}
+                        onEndMatch={isHistorical ? undefined : endMatch}
+                        onEditPlayers={isHistorical ? undefined : editMatchPlayers}
+                        onStart={!isHistorical && capturedIdx !== undefined ? () => startFromQueue(capturedIdx, courtId) : undefined}
+                      />
+                    )
+                  })
+                })()}
+              </div>
+            </section>
 
-          {waitingPlayers.length > 0 && (
+            <section className="ws-section">
+              <div className="ws-head">
+                <div className="ws-head-l">
+                  <h2>Recent Activity</h2>
+                  <span className="ws-head-sub">Match terakhir yang selesai</span>
+                </div>
+              </div>
+              {finished.length === 0 ? (
+                <div className="activity-empty">Belum ada match selesai.<br />Mulai dari Lapangan, lalu isi bola &amp; skor lalu klik <strong>Selesai</strong>.</div>
+              ) : (
+                <div className="activity-list">
+                  {[...finished].sort((a, b) => b.matchNumber - a.matchNumber).slice(0, 5).map(m => (
+                    <div key={m.id} className="activity-row"
+                      onClick={() => !isHistorical && setEditingMatch({ id: m.id, bola: m.shuttlesUsed ?? 0, scoreL: (m.score ?? '').split('-')[0] ?? '', scoreR: (m.score ?? '').split('-')[1] ?? '' })}>
+                      <div className="activity-icon"><Icon name="flag" /></div>
+                      <div className="activity-main">
+                        <div className="activity-title">Match #{m.matchNumber}<span style={{ color: 'var(--dim)', fontWeight: 500 }}>· Court {m.courtId}</span>{m.endTime && <span className="match-timer">{fmtDur(m.endTime - m.startTime)}</span>}</div>
+                        <div className="activity-meta">{nm(m.team1[0])} · {nm(m.team1[1])}　vs　{nm(m.team2[0])} · {nm(m.team2[1])}</div>
+                      </div>
+                      {m.score
+                        ? <div className="activity-score">{m.score}</div>
+                        : <div className="activity-score" style={{ color: 'var(--dim)', fontSize: 13 }}>{m.shuttlesUsed ?? 0} bola</div>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+            </>
+          )}
+
+          {mainTab === 'menunggu' && waitingPlayers.length === 0 && (
+            <div className="activity-empty">Belum ada pemain menunggu.<br />Tambah pemain lewat menu <strong>Pemain</strong>.</div>
+          )}
+
+          {mainTab === 'menunggu' && waitingPlayers.length > 0 && (
             <div className="waiting-section">
               <div className="section-title">
                 <span>Antrian Menunggu</span>
@@ -352,7 +421,8 @@ export function App() {
                       <div key={p.id} className="waiting-chip">
                         <div className="status-dot waiting" />
                         <span className={`skill-badge skill-${p.skill}`}>{p.skill}</span>
-                        {p.name}
+                        <span className="waiting-chip-name">{p.name}</span>
+                        <span className="waiting-chip-meta">{p.gamesPlayed}x main</span>
                       </div>
                     ))}
                   </div>
@@ -366,7 +436,8 @@ export function App() {
                       <div key={p.id} className="waiting-chip">
                         <div className="status-dot waiting" />
                         <span className={`skill-badge skill-${p.skill}`}>{p.skill}</span>
-                        {p.name}
+                        <span className="waiting-chip-name">{p.name}</span>
+                        <span className="waiting-chip-meta">Belum main</span>
                       </div>
                     ))}
                   </div>
@@ -375,10 +446,10 @@ export function App() {
             </div>
           )}
 
-          {(state.pregenerated ?? []).length > 0 && (
+          {mainTab === 'antrian' && (state.pregenerated ?? []).length > 0 && (
             <div className="waiting-section" style={{ marginTop: 12 }}>
               <div className="section-title">
-                <span>⚡ Antrian Match</span>
+                <span>Antrian Match</span>
                 <span>{(state.pregenerated ?? []).length} antrian</span>
               </div>
               <div className="match-history-grid">
@@ -417,7 +488,7 @@ export function App() {
             </div>
           )}
 
-          {state.matches.some(m => m.endTime) && (
+          {mainTab === 'riwayat' && state.matches.some(m => m.endTime) && (
             <div className="waiting-section" style={{ marginTop: 12 }}>
               <div className="section-title">
                 <span>Riwayat Match</span>
@@ -428,41 +499,67 @@ export function App() {
                   .filter(m => m.endTime)
                   .sort((a, b) => b.matchNumber - a.matchNumber)
                   .map(m => {
-                    const n = (id: string) => state.players.find(p => p.id === id)?.name ?? '?'
-                    const ns = (id: string) => { const pl = state.players.find(p => p.id === id); return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}><span style={{ color: 'var(--text)', fontWeight: 700 }}>{pl?.name ?? '?'}</span><span className={`skill-badge skill-${pl?.skill ?? 'B1'}`}>{pl?.skill ?? '?'}</span></span> }
                     const t1t = teamType(m.team1, state.players)
-                    const t2t = teamType(m.team2, state.players)
+                    const pl = (id: string) => state.players.find(p => p.id === id)
+                    const [s1, s2] = (m.score ?? '').split('-')
+                    const n1 = parseInt(s1 ?? '0'), n2 = parseInt(s2 ?? '0')
                     return (
                       <div key={m.id} className="mh-card"
                         style={{ borderLeft: `3px solid ${TYPE_COLOR[t1t]}`, ...(!isHistorical ? { cursor: 'pointer' } : {}) }}
-                        onClick={() => !isHistorical && setEditingMatch({ id: m.id, bola: m.shuttlesUsed ?? 0, scoreL: (m.score ?? '').split('-')[0] ?? '', scoreR: (m.score ?? '').split('-')[1] ?? '' })}
+                        onClick={() => !isHistorical && setEditingMatch({ id: m.id, bola: m.shuttlesUsed ?? 0, scoreL: s1 ?? '', scoreR: s2 ?? '' })}
                       >
                         <div className="mh-card-header">
-                          <span className="mh-num">#{m.matchNumber}</span>
-                          <span style={{ fontSize: 10, display: 'flex', gap: 2, alignItems: 'center', background: 'var(--bg)', borderRadius: 3, padding: '1px 5px' }}>
-                            <span style={{ color: TYPE_COLOR[t1t], fontWeight: 700 }}>{t1t}</span>
-                            <span style={{ color: 'var(--dim)' }}>vs</span>
-                            <span style={{ color: TYPE_COLOR[t2t], fontWeight: 700 }}>{t2t}</span>
-                          </span>
-                          <span className="mh-bola-tag">
-                            {m.shuttlesUsed ?? 0} bola{!isHistorical && ' ✏'}
-                          </span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span className="mh-num">#{m.matchNumber}</span>
+                            <span style={{ fontSize: 10, fontWeight: 700, color: TYPE_COLOR[t1t], background: 'var(--bg)', padding: '1px 6px', borderRadius: 3 }}>{t1t}</span>
+                          </div>
+                          <span className="mh-status">✓ Selesai{!isHistorical && ` · ${m.shuttlesUsed ?? 0} bola ✏`}{m.endTime && <span className="match-timer" style={{ marginLeft: 6 }}>{fmtDur(m.endTime - m.startTime)}</span>}</span>
                         </div>
-                        <div className="mh-team">{ns(m.team1[0])} · {ns(m.team1[1])}</div>
-                        <div className="mh-vs">vs</div>
-                        <div className="mh-team">{ns(m.team2[0])} · {ns(m.team2[1])}</div>
-                        {m.score && <div className="mh-score">{m.score}</div>}
+                        <div className="mh-body">
+                          <div className="mh-team-col">
+                            {m.team1.map(id => { const p = pl(id); return <div key={id} className="mh-player"><span>{p?.name ?? '?'}</span><span className={`skill-badge skill-${p?.skill ?? 'B1'}`}>{p?.skill ?? '?'}</span></div> })}
+                          </div>
+                          <div className="mh-score-box">
+                            <div className="mh-score-vs">vs</div>
+                            {m.score ? <>
+                              <div className="mh-score-num" style={{ color: n1 >= n2 ? 'var(--text)' : 'var(--gold)' }}>{s1}</div>
+                              <div className="mh-score-dash">—</div>
+                              <div className="mh-score-num" style={{ color: n2 > n1 ? 'var(--text)' : 'var(--gold)' }}>{s2}</div>
+                            </> : <div style={{ color: 'var(--dim)', fontSize: 13 }}>—</div>}
+                          </div>
+                          <div className="mh-team-col right">
+                            {m.team2.map(id => { const p = pl(id); return <div key={id} className="mh-player right"><span>{p?.name ?? '?'}</span><span className={`skill-badge skill-${p?.skill ?? 'B1'}`}>{p?.skill ?? '?'}</span></div> })}
+                          </div>
+                        </div>
                       </div>
                     )
                   })}
               </div>
             </div>
           )}
-        </div>
 
-        {ledgerOpen && <div className="drawer-backdrop" onClick={() => setLedgerOpen(false)} />}
-        <LedgerPanel state={state} open={ledgerOpen} onClose={() => setLedgerOpen(false)} />
+          {mainTab === 'pemain' && (
+            <PlayerPanel
+              inline
+              open={false}
+              onClose={() => setMainTab('lapangan')}
+              state={state}
+              onUpdate={s => mut.mutate(s)}
+            />
+          )}
+        </div>
       </div>
+
+      {/* ── Right rail: Master Pool + Live Ledger ── */}
+      <aside className="rail">
+        <MasterPool players={state.players} onAdd={() => setMainTab('pemain')} />
+        <LedgerCard state={state} onViewAll={() => setLedgerOpen(true)} />
+      </aside>
+    </div>
+
+    {/* ── Drawers ── */}
+    {ledgerOpen && <div className="drawer-backdrop" onClick={() => setLedgerOpen(false)} />}
+    <LedgerPanel state={state} open={ledgerOpen} onClose={() => setLedgerOpen(false)} />
 
       {editingMatch && (
         <EditMatchModal
@@ -470,16 +567,6 @@ export function App() {
           setEditingMatch={setEditingMatch}
           onSave={editMatch}
           onDelete={deleteMatch}
-        />
-      )}
-
-      {/* ── Player panel (today only) ── */}
-      {!isHistorical && (
-        <PlayerPanel
-          open={playerPanelOpen}
-          onClose={() => setPlayerPanelOpen(false)}
-          state={state}
-          onUpdate={s => mut.mutate(s)}
         />
       )}
 
@@ -522,7 +609,86 @@ export function App() {
           }}
         />
       )}
+    </>
+  )
+}
+
+// ── Sidebar / rail / icon helpers ─────────────────────────────────────────────
+
+function initials(name: string) {
+  return name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
+}
+function rp(n: number) { return `Rp ${n.toLocaleString('id-ID')}` }
+
+function MasterPool({ players, onAdd }: { players: Player[]; onAdd: () => void }) {
+  const active = players.filter(p => p.status !== 'Left')
+  return (
+    <div className="rail-card">
+      <div className="rail-card-head">
+        <h3>Master Pool</h3>
+        <span className="rail-count">{active.length} pemain</span>
+      </div>
+      <div className="rail-pool-list">
+        {active.length === 0
+          ? <div className="rail-empty">Belum ada pemain.<br />Tambah lewat tombol di bawah.</div>
+          : active.map(p => (
+            <div key={p.id} className="pool-row">
+              <div className={`player-avatar avatar-${p.skill}`}>{initials(p.name)}</div>
+              <div className="pool-row-name">
+                {p.name}
+                <span className="pool-row-meta">{(p.type ?? 'member') === 'harian' ? 'Harian' : 'Member'} · {p.gamesPlayed}x</span>
+              </div>
+              <span className={`skill-badge skill-${p.skill}`}>{p.skill}</span>
+            </div>
+          ))}
+      </div>
+      <button className="btn btn-ghost btn-sm rail-add" onClick={onAdd}>+ Tambah Pemain</button>
     </div>
+  )
+}
+
+function LedgerCard({ state, onViewAll }: { state: AppState; onViewAll: () => void }) {
+  const totalCost = state.players.reduce((s, p) => s + p.totalCost, 0)
+  const totalShuttles = state.matches.reduce((s, m) => s + (m.shuttlesUsed ?? 0), 0)
+  const rows = [...state.players].filter(p => p.totalCost > 0).sort((a, b) => b.totalCost - a.totalCost).slice(0, 5)
+  return (
+    <div className="rail-card">
+      <div className="rail-card-head">
+        <h3>Live Ledger</h3>
+        <span className="rail-count">{totalShuttles} bola</span>
+      </div>
+      <div className="ledger-card-total">
+        <span>Total Outstanding</span>
+        <strong>{rp(totalCost)}</strong>
+      </div>
+      <div className="ledger-card-rows">
+        {rows.length === 0
+          ? <div className="rail-empty">Belum ada transaksi.</div>
+          : rows.map(p => (
+            <div key={p.id} className="ledger-card-row"><span>{p.name}</span><span className="lc-amt">{rp(p.totalCost)}</span></div>
+          ))}
+      </div>
+      <button className="btn btn-ghost btn-sm rail-add" onClick={onViewAll}>Lihat Semua Transaksi</button>
+    </div>
+  )
+}
+
+function Icon({ name }: { name: string }) {
+  const paths: Record<string, JSX.Element> = {
+    grid: <><rect x="3" y="3" width="7.5" height="7.5" rx="1.6" /><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.6" /><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.6" /><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.6" /></>,
+    clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7.5V12l3.2 1.8" /></>,
+    bolt: <path d="M13 2.5 4.5 13.5H11l-1 8 8.5-11.5H12l1-7.5z" />,
+    history: <><path d="M3.2 9A9 9 0 1 1 3 13" /><path d="M3 3.5V9h5.5" /><path d="M12 8.2V12l3 1.8" /></>,
+    users: <><circle cx="9" cy="8" r="3.4" /><path d="M2.8 20a6.2 6.2 0 0 1 12.4 0" /><path d="M16.5 5.3a3.2 3.2 0 0 1 0 5.9" /><path d="M18.2 20a6 6 0 0 0-2.4-4.3" /></>,
+    gear: <><circle cx="12" cy="12" r="3.3" /><path d="M12 2.4v3.1M12 18.5v3.1M21.6 12h-3.1M5.5 12H2.4M18.5 5.5l-2.2 2.2M7.7 16.3l-2.2 2.2M18.5 18.5l-2.2-2.2M7.7 7.7 5.5 5.5" /></>,
+    wallet: <><rect x="3" y="6" width="18" height="13" rx="2.6" /><path d="M3 10.5h18" /><circle cx="16.5" cy="14.5" r="1.25" fill="currentColor" stroke="none" /></>,
+    flag: <><path d="M4.5 21V4" /><path d="M4.5 4.5h12l-1.6 4 1.6 4h-12" /></>,
+    plus: <path d="M12 5v14M5 12h14" />,
+  }
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
+      {paths[name]}
+    </svg>
   )
 }
 
@@ -693,6 +859,7 @@ interface AddQueueProps {
 function AddToQueueModal({ state, initialSelected, submitLabel, onSubmit, onClose }: AddQueueProps) {
   const [selected, setSelected] = useState<string[]>(initialSelected ?? [])
   const [warning, setWarning] = useState<string | null>(null)
+  const [skippedFirst, setSkippedFirst] = useState<string | null>(null)
   const [modalTab, setModalTab] = useState<'menunggu' | 'antrian'>('menunggu')
 
   const queuedIds     = new Set((state.pregenerated ?? []).flat())
@@ -715,8 +882,8 @@ function AddToQueueModal({ state, initialSelected, submitLabel, onSubmit, onClos
     setSelected(s => s.includes(id) ? s.filter(x => x !== id) : s.length < 4 ? [...s, id] : s)
   }
 
-  function checkAndSubmit() {
-    if (selected.length !== 4) return
+  function proceedWithConflictCheck() {
+    setSkippedFirst(null)
     const [a, b, c, d] = selected
     const pk = (x: string, y: string) => [x, y].sort().join('|')
     const partnerConflict = pastPairs.has(pk(a, b)) || pastPairs.has(pk(c, d))
@@ -729,6 +896,15 @@ function AddToQueueModal({ state, initialSelected, submitLabel, onSubmit, onClos
     } else {
       onSubmit(selected as [string, string, string, string])
     }
+  }
+
+  function checkAndSubmit() {
+    if (selected.length !== 4) return
+    if (inQueue[0] && !selected.includes(inQueue[0].id) && skippedFirst === null) {
+      setSkippedFirst(inQueue[0].name)
+      return
+    }
+    proceedWithConflictCheck()
   }
 
   const ready = selected.length === 4
@@ -810,7 +986,18 @@ function AddToQueueModal({ state, initialSelected, submitLabel, onSubmit, onClos
               </div>
             )}
 
-            {warning ? (
+            {skippedFirst ? (
+              <div style={{ background: 'rgba(255,200,0,0.08)', border: '1px solid var(--gold)', borderRadius: 8, padding: 12 }}>
+                <div style={{ fontSize: 13, color: 'var(--gold)', fontWeight: 700, marginBottom: 6 }}>⚠ Peringatan</div>
+                <div style={{ fontSize: 12, color: 'var(--text)', marginBottom: 10 }}>
+                  pemain <strong>{skippedFirst}</strong> sudah lama berhenti, pertimbangkan untuk set ulang
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button className="btn btn-primary" style={{ flex: 1 }} onClick={proceedWithConflictCheck}>Lanjutkan</button>
+                  <button className="btn btn-ghost" onClick={() => setSkippedFirst(null)}>Ganti Pemain</button>
+                </div>
+              </div>
+            ) : warning ? (
               <div style={{ background: 'rgba(255,200,0,0.08)', border: '1px solid var(--gold)', borderRadius: 8, padding: 12 }}>
                 <div style={{ fontSize: 13, color: 'var(--gold)', fontWeight: 700, marginBottom: 6 }}>⚠ Peringatan</div>
                 <div style={{ fontSize: 12, color: 'var(--text)', marginBottom: 10, textTransform: 'capitalize' }}>{warning}. Tetap lanjutkan?</div>

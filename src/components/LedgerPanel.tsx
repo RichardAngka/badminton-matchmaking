@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx'
 import type { AppState } from '../types'
+import { Button } from './ui/button'
 
 interface Props { state: AppState; open: boolean; onClose: () => void }
 
@@ -28,7 +29,7 @@ function exportXLSX(state: AppState) {
     ['No', 'Nama', 'Harian Price', 'Ball Usage Price', 'Total to Pay'],
     ...members.map((p, i) => [i + 1, p.name, 0, p.totalCost, p.totalCost]),
     [],
-    ...harians.map((p, i) => [i + 1, p.name, state.harianFee, p.totalCost, state.harianFee + p.totalCost]),
+    ...harians.map((p, i) => [i + 1, p.name, state.harianFee, p.totalCost - state.harianFee, p.totalCost]),
   ]
 
   const wb = XLSX.utils.book_new()
@@ -39,23 +40,30 @@ function exportXLSX(state: AppState) {
   XLSX.writeFile(wb, `pbsor-${day}-${state.sessionDate}.xlsx`)
 }
 
+function initials(name: string) {
+  return name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
+}
+
 export function LedgerPanel({ state, open, onClose }: Props) {
   const totalShuttles = state.matches.reduce((sum, m) => sum + (m.shuttlesUsed ?? 0), 0)
+  const totalCost = state.players.reduce((sum, p) => sum + p.totalCost, 0)
   const rows = [...state.players]
     .filter(p => p.gamesPlayed > 0 || p.totalCost > 0)
     .sort((a, b) => b.totalCost - a.totalCost)
 
   return (
     <div className={`right-panel${open ? ' open' : ''}`}>
-      <div className="ledger-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <div>
-          <div className="ledger-title">List Biaya Bola / Orang</div>
-          <div className="ledger-total">
-            {totalShuttles} Bola
-            <span>total sesi</span>
-          </div>
+      <div className="ledger-header">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div className="ledger-title">Live Ledger</div>
+          <Button variant="ghost" size="sm" onClick={onClose}>✕</Button>
         </div>
-        <button className="btn btn-ghost btn-sm" onClick={onClose} style={{ marginTop: 2 }}>✕</button>
+        <div className="ledger-subtitle">Biaya bola sesi ini per pemain</div>
+        <div className="ledger-outstanding-label">Total Outstanding</div>
+        <div className="ledger-total">
+          {rp(totalCost)}
+          <span>{totalShuttles} bola</span>
+        </div>
       </div>
 
       <div className="ledger-list">
@@ -64,25 +72,37 @@ export function LedgerPanel({ state, open, onClose }: Props) {
             Selesaikan pertandingan pertama<br />
             untuk melihat rekapan biaya
           </div>
-        ) : rows.map((p, i) => (
-          <div key={p.id} className="ledger-row">
-            <div className={`ledger-rank${i < 3 ? ' top' : ''}`}>{i + 1}</div>
-            <div className="ledger-name">{p.name}</div>
-            <div className="ledger-cost">{rp(p.totalCost)}</div>
-            <div className="ledger-games">{p.gamesPlayed}x main</div>
-          </div>
-        ))}
+        ) : (
+          <>
+            <div className="ledger-section-label">
+              <span>Pemain Aktif</span>
+              <span>Diurutkan tertinggi</span>
+            </div>
+            {rows.map(p => (
+              <div key={p.id} className="ledger-row">
+                <div className={`player-avatar avatar-${p.skill}`}>{initials(p.name)}</div>
+                <div className="ledger-name-block">
+                  <div className="ledger-name">{p.name}</div>
+                  <div className="ledger-name-sub">
+                    {p.skill} · {(p.type ?? 'member') === 'harian' ? 'Harian' : 'Member'} · {p.gamesPlayed}x main
+                  </div>
+                </div>
+                <div className="ledger-cost">{rp(p.totalCost)}</div>
+              </div>
+            ))}
+          </>
+        )}
       </div>
 
       <div className="ledger-footer">
-        <button
-          className="btn btn-accent"
-          style={{ width: '100%' }}
+        <Button
+          variant="secondary"
+          className="w-full"
           onClick={() => exportXLSX(state)}
           disabled={rows.length === 0}
         >
-          ↓ Download XLSX (2 sheet)
-        </button>
+          ↓ Download XLSX
+        </Button>
       </div>
     </div>
   )

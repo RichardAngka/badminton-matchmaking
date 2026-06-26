@@ -1,5 +1,6 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import type { Match, Player } from '../types'
+import { Button } from './ui/button'
 
 interface Props {
   courtId: number
@@ -15,6 +16,11 @@ function byId(players: Player[], id: string) {
   return players.find(p => p.id === id)
 }
 
+const fmt = (ms: number) => {
+  const s = Math.floor(ms / 1000)
+  return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
+}
+
 export function CourtCard({ courtId, match, players, upcoming, onEndMatch, onEditPlayers, onStart }: Props) {
   const [shuttles, setShuttles] = useState('')
   const [scoreL, setScoreL] = useState('')
@@ -25,6 +31,12 @@ export function CourtCard({ courtId, match, players, upcoming, onEndMatch, onEdi
   const refSelesai = useRef<HTMLButtonElement>(null)
   const [editingPlayers, setEditingPlayers] = useState(false)
   const [editSelected, setEditSelected] = useState<string[]>([])
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    if (!match) return
+    const id = setInterval(() => setTick(n => n + 1), 1000)
+    return () => clearInterval(id)
+  }, [match?.id])
 
   function handleEnd() {
     if (!match || shuttles === '' || +shuttles < 0 || !onEndMatch) return
@@ -59,9 +71,12 @@ export function CourtCard({ courtId, match, players, upcoming, onEndMatch, onEdi
     <div className={`court-card${match ? ' active' : ' empty'}`}>
       <div className="court-header">
         <span className="court-number">COURT {courtId}</span>
-        <span className="match-number">{match ? `Match #${match.matchNumber}` : 'Menunggu pemain'}</span>
+        {match
+          ? <><span className="match-num-badge">#{match.matchNumber}</span><span className="match-timer">{fmt(Date.now() - match.startTime)}</span></>
+          : <span className="match-number">Menunggu pemain</span>
+        }
         {match && onEditPlayers && (
-          <button className="btn-icon" onClick={startEdit} title="Edit pemain" style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: 14, padding: '0 2px' }}>✏️</button>
+          <Button variant="ghost" size="icon" onClick={startEdit} title="Edit pemain" className="ml-auto h-7 w-7">✏️</Button>
         )}
       </div>
 
@@ -70,7 +85,7 @@ export function CourtCard({ courtId, match, players, upcoming, onEndMatch, onEdi
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h2>✏️ Edit Pemain — Court {courtId}</h2>
-              <button className="btn btn-ghost btn-sm" onClick={() => setEditingPlayers(false)}>✕</button>
+              <Button variant="ghost" size="sm" onClick={() => setEditingPlayers(false)}>✕</Button>
             </div>
             <div className="modal-body">
               <div className="config-form">
@@ -123,15 +138,14 @@ export function CourtCard({ courtId, match, players, upcoming, onEndMatch, onEdi
                 )}
 
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <button
-                    className="btn btn-primary"
-                    style={{ flex: 1 }}
+                  <Button
+                    className="flex-1"
                     disabled={editSelected.length !== 4 || new Set(editSelected).size !== 4}
                     onClick={saveEdit}
                   >
                     Simpan
-                  </button>
-                  <button className="btn btn-ghost" onClick={() => setEditingPlayers(false)}>Batal</button>
+                  </Button>
+                  <Button variant="ghost" onClick={() => setEditingPlayers(false)}>Batal</Button>
                 </div>
               </div>
             </div>
@@ -196,20 +210,20 @@ export function CourtCard({ courtId, match, players, upcoming, onEndMatch, onEdi
                   style={{ width: 52 }}
                 />
               </div>
-              <button
+              <Button
                 ref={refSelesai}
-                className="btn btn-primary btn-sm"
+                size="sm"
                 onClick={handleEnd}
                 disabled={shuttles === '' || +shuttles < 0}
               >
                 Selesai
-              </button>
+              </Button>
             </div>
           )}
         </>
       ) : upcoming && upcoming.length === 4 ? (
-        <div style={{ padding: '4px 0' }}>
-          <div style={{ fontSize: 10, color: 'var(--gold)', fontWeight: 700, letterSpacing: 1, marginBottom: 6 }}>SEGERA BERMAIN</div>
+        <div>
+          <span className="segera-label">SEGERA BERMAIN</span>
           <div className="match-teams" style={{ opacity: 0.85 }}>
             <div className="team">
               {upcoming.slice(0, 2).map(p => (
@@ -232,9 +246,9 @@ export function CourtCard({ courtId, match, players, upcoming, onEndMatch, onEdi
             </div>
           </div>
           {onStart && (
-            <button className="btn btn-primary btn-sm" style={{ width: '100%', marginTop: 8 }} onClick={onStart}>
+            <Button size="sm" className="w-full mt-2" onClick={onStart}>
               ▶ Mulai
-            </button>
+            </Button>
           )}
         </div>
       ) : (

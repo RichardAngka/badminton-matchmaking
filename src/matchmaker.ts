@@ -6,17 +6,16 @@ function pair(a: SkillLevel, b: SkillLevel): [number, number] {
   return [Math.max(VAL[a], VAL[b]), Math.min(VAL[a], VAL[b])];
 }
 
-function matchCost(
-  a: SkillLevel,
-  b: SkillLevel,
-  c: SkillLevel,
-  d: SkillLevel,
-): number {
-  const t1 = pair(a, b),
-    t2 = pair(c, d);
-  if (t1[0] === t2[0] && t1[1] === t2[1]) return t1[0] === t1[1] ? 0 : 1; // pure same-skill mirror = 0, mixed mirror = 1
-  if (t1[0] + t1[1] === t2[0] + t2[1]) return 0; // balanced variety
-  return Infinity; // unbalanced
+// Tier 1→5 mapped to cost 0→4; Infinity = reject (sum diff > 2)
+function matchCost(a: SkillLevel, b: SkillLevel, c: SkillLevel, d: SkillLevel): number {
+  const t1 = pair(a, b), t2 = pair(c, d);
+  if (t1[0] === t1[1] && t1[0] === t2[0] && t2[0] === t2[1]) return 0; // Tier 1: all same skill
+  if (t1[0] === t2[0] && t1[1] === t2[1]) return 1;                     // Tier 2: mirror, 1-gap per team
+  const diff = Math.abs(t1[0] + t1[1] - t2[0] - t2[1]);
+  if (diff === 0) return 2; // Tier 3: balanced variety (same sum, different pairs)
+  if (diff === 1) return 3; // Tier 4: slight imbalance
+  if (diff === 2) return 4; // Tier 5: compensated spread, last resort
+  return Infinity;
 }
 
 const pairKey = (a: Player, b: Player) => [a.id, b.id].sort().join("|");
@@ -70,8 +69,6 @@ export function findBestFour(
             if (pastOpponents.has(pairKey(a, d))) score += 1;
             if (pastOpponents.has(pairKey(b, c))) score += 1;
             if (pastOpponents.has(pairKey(b, d))) score += 1;
-            const isSameSkill = a.skill === b.skill && b.skill === c.skill && c.skill === d.skill;
-            score += (fCount === 4 || (isSameSkill && fCount === 0)) ? 0 : 1;
 
             if (score < bestScore) {
               bestScore = score;
