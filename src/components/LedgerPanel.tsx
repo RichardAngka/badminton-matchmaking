@@ -23,16 +23,19 @@ function exportXLSX(state: AppState) {
   ]
   const matchCost = matchCostByPlayer(state)
   const ballUsage = (p: { id: string }) => matchCost.get(p.id) ?? 0
+  const matchCount = new Map<string, number>()
+  for (const m of done) for (const id of [...m.team1, ...m.team2]) matchCount.set(id, (matchCount.get(id) ?? 0) + 1)
+  const played = (p: { id: string }) => matchCount.get(p.id) ?? 0
 
   const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, 'id')
   const members = [...state.players].filter(p => p.type === 'member').sort(byName)
   const harians = [...state.players].filter(p => p.type === 'harian').sort(byName)
 
   const ledgerSheet = [
-    ['No', 'Nama', 'Harian Price', 'Ball Usage Price', 'Total to Pay'],
-    ...members.map((p, i) => [i + 1, p.name, 0, ballUsage(p), ballUsage(p)]),
+    ['No', 'Nama', 'Harian Price', 'Ball Usage Price', 'Total Played Match', 'Total to Pay'],
+    ...members.map((p, i) => [i + 1, p.name, 0, ballUsage(p), played(p), ballUsage(p)]),
     [],
-    ...harians.map((p, i) => [i + 1, p.name, state.harianFee, ballUsage(p), state.harianFee + ballUsage(p)]),
+    ...harians.map((p, i) => [i + 1, p.name, state.harianFee, ballUsage(p), played(p), state.harianFee + ballUsage(p)]),
   ]
 
   const wb = XLSX.utils.book_new()
