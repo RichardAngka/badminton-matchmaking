@@ -185,7 +185,7 @@ body::before {
 /* ── Court grid ── */
 .courts-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(285px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 12px;
   margin-bottom: 20px;
 }
@@ -429,6 +429,7 @@ body::before {
   grid-template-columns: repeat(4, 1fr);
   gap: 6px;
 }
+@media (max-width: 880px) { .match-history-grid { grid-template-columns: repeat(2, 1fr); } .waiting-chip { min-height: 44px; } }
 @media (max-width: 600px) { .match-history-grid { grid-template-columns: 1fr; } }
 
 /* ── iPhone 15 / mobile (≤480px) ── */
@@ -436,6 +437,7 @@ body::before {
   .right-panel { width: 100vw; }
   .modal { max-height: calc(100dvh - 32px); display: flex; flex-direction: column; }
   .modal-body { overflow-y: auto; }
+  .cal-popup { left: 8px; right: 8px; width: auto; min-width: unset; }
 }
 
 .mh-card {
@@ -913,4 +915,6 @@ body::before {
   .topbar-actions { margin-left: 0; width: 100%; justify-content: flex-end; }
   .topbar .player-count-badge { display: none; }
   .new-match-btn { padding: 9px 14px; }
+  .ws-head h2    { font-size: 16px; }
+  .section-title { font-size: 17px; }
 }
