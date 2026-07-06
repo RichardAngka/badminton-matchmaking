@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from './supabase'
+import { RoleCtx } from './RoleContext'
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null | undefined>(undefined)
@@ -17,7 +18,10 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   }, [])
 
   if (session === undefined) return <div className="auth-loading">…</div>
-  if (session) return <>{children}</>
+  if (session) {
+    const isAdmin = session.user.user_metadata?.role === 'admin'
+    return <RoleCtx.Provider value={isAdmin}>{children}</RoleCtx.Provider>
+  }
 
   async function login(e: React.FormEvent) {
     e.preventDefault()

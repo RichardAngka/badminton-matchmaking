@@ -2,6 +2,7 @@ import * as XLSX from 'xlsx'
 import type { AppState, Player } from '../types'
 import { Button } from './ui/button'
 import { matchCostByPlayer, playerTotal } from '../ledgerMath'
+import { useIsAdmin } from '../RoleContext'
 
 interface Props { state: AppState; open: boolean; onClose: () => void }
 
@@ -51,6 +52,7 @@ function initials(name: string) {
 }
 
 export function LedgerPanel({ state, open, onClose }: Props) {
+  const isAdmin = useIsAdmin()
   const totalShuttles = state.matches.reduce((sum, m) => sum + (m.shuttlesUsed ?? 0), 0)
   const matchCost = matchCostByPlayer(state)
   const total = (p: Player) => playerTotal(state, p, matchCost)
@@ -102,7 +104,7 @@ export function LedgerPanel({ state, open, onClose }: Props) {
         )}
       </div>
 
-      <div className="ledger-footer">
+      {isAdmin && <div className="ledger-footer">
         <Button
           variant="secondary"
           className="w-full"
@@ -111,7 +113,7 @@ export function LedgerPanel({ state, open, onClose }: Props) {
         >
           ↓ Download XLSX
         </Button>
-      </div>
+      </div>}
     </div>
   )
 }

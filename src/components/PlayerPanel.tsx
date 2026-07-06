@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { AppState, Match, Player, SkillLevel, Gender, PlayerStatus, PlayerType } from '../types'
 import { Button } from './ui/button'
+import { useIsAdmin } from '../RoleContext'
 
 interface Props {
   open: boolean
@@ -25,6 +26,7 @@ const labelStyle: React.CSSProperties = {
 }
 
 export function PlayerPanel({ open, onClose, state, onUpdate, inline }: Props) {
+  const isAdmin = useIsAdmin()
   const [name, setName] = useState('')
   const [skill, setSkill] = useState<SkillLevel>('B1')
   const [gender, setGender] = useState<Gender>('M')
@@ -41,7 +43,7 @@ export function PlayerPanel({ open, onClose, state, onUpdate, inline }: Props) {
   }
 
   function saveEdit() {
-    if (!editId || !editDraft.name.trim()) return
+    if (!isAdmin || !editId || !editDraft.name.trim()) return
     const fee = state.harianFee ?? 25000
     onUpdate({
       ...state,
@@ -57,7 +59,7 @@ export function PlayerPanel({ open, onClose, state, onUpdate, inline }: Props) {
   }
 
   function addPlayer() {
-    if (!name.trim()) return
+    if (!isAdmin || !name.trim()) return
     const now = Date.now()
     const restTimes = state.players
       .filter(p => p.status === 'Waiting' && p.restingSince != null)
@@ -83,12 +85,12 @@ export function PlayerPanel({ open, onClose, state, onUpdate, inline }: Props) {
   }
 
   function deletePlayer(id: string) {
-    if (!window.confirm('Hapus pemain ini?')) return
+    if (!isAdmin || !window.confirm('Hapus pemain ini?')) return
     onUpdate({ ...state, players: state.players.filter(p => p.id !== id) })
   }
 
   function markLeft(p: Player) {
-    if (p.status === 'Playing') return
+    if (!isAdmin || p.status === 'Playing') return
     const newStatus: PlayerStatus = p.status === 'Left' ? 'Waiting' : 'Left'
     onUpdate({
       ...state,
@@ -188,34 +190,36 @@ export function PlayerPanel({ open, onClose, state, onUpdate, inline }: Props) {
               </div>
             </div>
           )}
-          <div className="player-actions">
-            {editId !== p.id && (
-              <Button
-                variant="tertiary"
-                size="icon-lg"
-                onClick={() => startEdit(p)}
-                title="Edit pemain"
-              >✏</Button>
-            )}
-            {p.status !== 'Playing' && editId !== p.id && (
-              <Button
-                variant={p.status === 'Left' ? 'secondary' : 'tertiary'}
-                size="icon-lg"
-                onClick={() => markLeft(p)}
-                title={p.status === 'Left' ? 'Check-in kembali' : 'Tandai pulang'}
-              >
-                {p.status === 'Left' ? '↩' : '→'}
-              </Button>
-            )}
-            {p.status !== 'Playing' && editId !== p.id && (
-              <Button
-                variant="destructive"
-                size="icon-lg"
-                onClick={() => deletePlayer(p.id)}
-                title="Hapus pemain"
-              >✕</Button>
-            )}
-          </div>
+          {isAdmin && (
+            <div className="player-actions">
+              {editId !== p.id && (
+                <Button
+                  variant="tertiary"
+                  size="icon-lg"
+                  onClick={() => startEdit(p)}
+                  title="Edit pemain"
+                >✏</Button>
+              )}
+              {p.status !== 'Playing' && editId !== p.id && (
+                <Button
+                  variant={p.status === 'Left' ? 'secondary' : 'tertiary'}
+                  size="icon-lg"
+                  onClick={() => markLeft(p)}
+                  title={p.status === 'Left' ? 'Check-in kembali' : 'Tandai pulang'}
+                >
+                  {p.status === 'Left' ? '↩' : '→'}
+                </Button>
+              )}
+              {p.status !== 'Playing' && editId !== p.id && (
+                <Button
+                  variant="destructive"
+                  size="icon-lg"
+                  onClick={() => deletePlayer(p.id)}
+                  title="Hapus pemain"
+                >✕</Button>
+              )}
+            </div>
+          )}
         </div>
       ))}
       {displayed.length === 0 && state.players.length > 0 && (
@@ -342,7 +346,7 @@ export function PlayerPanel({ open, onClose, state, onUpdate, inline }: Props) {
         <div style={{ paddingBottom: 96 }}>{playerList}</div>
 
         {/* Floating + button, right-anchored */}
-        <button
+        {isAdmin && <button
           onClick={() => setShowForm(true)}
           style={{
             position: 'fixed', bottom: 80, right: 20,
@@ -354,7 +358,7 @@ export function PlayerPanel({ open, onClose, state, onUpdate, inline }: Props) {
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}
           title="Tambah Pemain"
-        >+</button>
+        >+</button>}
       </>
     )
   }
@@ -373,7 +377,7 @@ export function PlayerPanel({ open, onClose, state, onUpdate, inline }: Props) {
         </div>
         {filterChips}
         {playerList}
-        {addForm}
+        {isAdmin && addForm}
       </div>
     </>
   )

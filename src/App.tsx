@@ -12,6 +12,7 @@ import { LedgerPanel } from './components/LedgerPanel'
 import { PlayerPanel, TYPE_COLOR, teamType } from './components/PlayerPanel'
 import { CalendarPicker } from './components/CalendarPicker'
 import { matchCostByPlayer, playerTotal } from './ledgerMath'
+import { useIsAdmin } from './RoleContext'
 
 const TODAY = new Date().toLocaleDateString('en-CA')  // YYYY-MM-DD, valid for date column
 
@@ -47,7 +48,8 @@ export function App() {
   const mainTab: Tab = ROUTE_TAB[pathname] ?? 'lapangan'
   const setMainTab = (tab: Tab) => navigate(TAB_ROUTE[tab])
 
-  const isHistorical = false // ponytail: was selectedDate !== TODAY, restore to re-lock past dates
+  const isAdmin = useIsAdmin()
+  const isHistorical = !isAdmin  // ponytail: false for admin (full edit), true for viewer (read-only)
 
   // Main state query — keyed by date so switching sessions re-fetches cleanly
   const { data: state = DEFAULT_STATE } = useQuery({
@@ -317,7 +319,7 @@ export function App() {
               {!supabase ? 'Local' : dbStatus === 'error' ? 'DB ✗' : dbStatus === 'success' ? 'DB' : 'DB…'}
             </div>
             <button className="icon-btn" onClick={() => setLedgerOpen(true)} title="Live Ledger"><Icon name="wallet" /></button>
-            <button className="icon-btn" onClick={() => setConfigOpen(true)} title="Konfigurasi"><Icon name="gear" /></button>
+            {isAdmin && <button className="icon-btn" onClick={() => setConfigOpen(true)} title="Konfigurasi"><Icon name="gear" /></button>}
             <button className="btn btn-primary new-match-btn" onClick={() => setQueueOpen(true)} disabled={isHistorical}>
               <Icon name="plus" /> New Match
             </button>
