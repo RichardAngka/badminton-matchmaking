@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import * as XLSX from 'xlsx'
 import type { AppState, Player } from '../types'
 import { Button } from './ui/button'
@@ -53,6 +54,7 @@ function initials(name: string) {
 
 export function LedgerPanel({ state, open, onClose }: Props) {
   const isAdmin = useIsAdmin()
+  const [filter, setFilter] = useState<'both' | 'member' | 'harian'>('both')
   const totalShuttles = state.matches.reduce((sum, m) => sum + (m.shuttlesUsed ?? 0), 0)
   const matchCost = matchCostByPlayer(state)
   const total = (p: Player) => playerTotal(state, p, matchCost)
@@ -60,6 +62,7 @@ export function LedgerPanel({ state, open, onClose }: Props) {
   const rows = [...state.players]
     .filter(p => p.gamesPlayed > 0 || total(p) > 0)
     .sort((a, b) => total(b) - total(a))
+  const filtered = filter === 'both' ? rows : rows.filter(p => (p.type ?? 'member') === filter)
 
   return (
     <div className={`right-panel${open ? ' open' : ''}`}>
@@ -88,7 +91,19 @@ export function LedgerPanel({ state, open, onClose }: Props) {
               <span>Pemain Aktif</span>
               <span>Diurutkan tertinggi</span>
             </div>
-            {rows.map(p => (
+            <div style={{ display: 'flex', gap: 6, padding: '4px 0 8px' }}>
+              {(['both', 'member', 'harian'] as const).map(f => (
+                <button key={f} onClick={() => setFilter(f)} style={{
+                  padding: '4px 12px', borderRadius: 999, fontSize: 12, fontWeight: 500,
+                  border: 'none', cursor: 'pointer',
+                  background: filter === f ? '#d4a017' : 'rgba(255,255,255,0.08)',
+                  color: filter === f ? '#000' : 'rgba(255,255,255,0.6)',
+                }}>
+                  {f === 'both' ? 'Semua' : f === 'member' ? 'Member' : 'Harian'}
+                </button>
+              ))}
+            </div>
+            {filtered.map(p => (
               <div key={p.id} className="ledger-row">
                 <div className={`player-avatar avatar-${p.skill}`}>{initials(p.name)}</div>
                 <div className="ledger-name-block">
@@ -100,6 +115,7 @@ export function LedgerPanel({ state, open, onClose }: Props) {
                 <div className="ledger-cost">{rp(total(p))}</div>
               </div>
             ))}
+            {filtered.length === 0 && <div className="ledger-empty">Tidak ada pemain {filter}</div>}
           </>
         )}
       </div>
