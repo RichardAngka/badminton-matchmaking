@@ -281,6 +281,12 @@ export function App() {
             {state.players.filter(p => p.status !== 'Left').length > 0 && <span className="nav-count">{state.players.filter(p => p.status !== 'Left').length}</span>}
           </button>
         </nav>
+        <div className="sidebar-foot">
+          <button className="nav-item" style={{ color: 'var(--muted)' }}
+            onClick={() => supabase?.auth.signOut()} title="Keluar">
+            <Icon name="logout" /><span>Keluar</span>
+          </button>
+        </div>
       </aside>
 
       {/* ── Workspace ── */}
@@ -702,6 +708,7 @@ function Icon({ name }: { name: string }) {
     wallet: <><rect x="3" y="6" width="18" height="13" rx="2.6" /><path d="M3 10.5h18" /><circle cx="16.5" cy="14.5" r="1.25" fill="currentColor" stroke="none" /></>,
     flag: <><path d="M4.5 21V4" /><path d="M4.5 4.5h12l-1.6 4 1.6 4h-12" /></>,
     plus: <path d="M12 5v14M5 12h14" />,
+    logout: <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></>,
   }
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
