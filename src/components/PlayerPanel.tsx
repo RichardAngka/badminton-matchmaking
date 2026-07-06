@@ -42,11 +42,16 @@ export function PlayerPanel({ open, onClose, state, onUpdate, inline }: Props) {
 
   function saveEdit() {
     if (!editId || !editDraft.name.trim()) return
+    const fee = state.harianFee ?? 25000
     onUpdate({
       ...state,
-      players: state.players.map(p =>
-        p.id === editId ? { ...p, name: editDraft.name.trim(), skill: editDraft.skill, gender: editDraft.gender, type: editDraft.type } : p
-      ),
+      players: state.players.map(p => {
+        if (p.id !== editId) return p
+        const oldType = p.type ?? 'member'
+        // ponytail: keep totalCost's baked-in harian fee in sync when type flips, so ledger's totalCost - harianFee stays non-negative
+        const feeDelta = editDraft.type === oldType ? 0 : editDraft.type === 'harian' ? fee : -fee
+        return { ...p, name: editDraft.name.trim(), skill: editDraft.skill, gender: editDraft.gender, type: editDraft.type, totalCost: p.totalCost + feeDelta }
+      }),
     })
     setEditId(null)
   }

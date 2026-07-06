@@ -11,6 +11,7 @@ import { CourtCard } from './components/CourtCard'
 import { LedgerPanel } from './components/LedgerPanel'
 import { PlayerPanel, TYPE_COLOR, teamType } from './components/PlayerPanel'
 import { CalendarPicker } from './components/CalendarPicker'
+import { matchCostByPlayer, playerTotal } from './ledgerMath'
 
 const TODAY = new Date().toLocaleDateString('en-CA')  // YYYY-MM-DD, valid for date column
 
@@ -663,9 +664,11 @@ function MasterPool({ players, onAdd }: { players: Player[]; onAdd: () => void }
 }
 
 function LedgerCard({ state, onViewAll }: { state: AppState; onViewAll: () => void }) {
-  const totalCost = state.players.reduce((s, p) => s + p.totalCost, 0)
+  const matchCost = matchCostByPlayer(state)
+  const total = (p: Player) => playerTotal(state, p, matchCost)
+  const totalCost = state.players.reduce((s, p) => s + total(p), 0)
   const totalShuttles = state.matches.reduce((s, m) => s + (m.shuttlesUsed ?? 0), 0)
-  const rows = [...state.players].filter(p => p.totalCost > 0).sort((a, b) => b.totalCost - a.totalCost).slice(0, 5)
+  const rows = [...state.players].filter(p => total(p) > 0).sort((a, b) => total(b) - total(a)).slice(0, 5)
   return (
     <div className="rail-card">
       <div className="rail-card-head">
@@ -680,7 +683,7 @@ function LedgerCard({ state, onViewAll }: { state: AppState; onViewAll: () => vo
         {rows.length === 0
           ? <div className="rail-empty">Belum ada transaksi.</div>
           : rows.map(p => (
-            <div key={p.id} className="ledger-card-row"><span>{p.name}</span><span className="lc-amt">{rp(p.totalCost)}</span></div>
+            <div key={p.id} className="ledger-card-row"><span>{p.name}</span><span className="lc-amt">{rp(total(p))}</span></div>
           ))}
       </div>
       <button className="btn btn-ghost btn-sm rail-add" onClick={onViewAll}>Lihat Semua Transaksi</button>

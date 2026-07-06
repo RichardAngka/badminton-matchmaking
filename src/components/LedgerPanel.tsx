@@ -1,6 +1,7 @@
 import * as XLSX from 'xlsx'
-import type { AppState } from '../types'
+import type { AppState, Player } from '../types'
 import { Button } from './ui/button'
+import { matchCostByPlayer, playerTotal } from '../ledgerMath'
 
 interface Props { state: AppState; open: boolean; onClose: () => void }
 
@@ -20,6 +21,8 @@ function exportXLSX(state: AppState) {
       return [m.matchNumber, p1, p2, p3, p4, m.shuttlesUsed ?? 0, cost, m.score ?? '']
     }),
   ]
+  const matchCost = matchCostByPlayer(state)
+  const ballUsage = (p: { id: string }) => matchCost.get(p.id) ?? 0
 
   const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, 'id')
   const members = [...state.players].filter(p => p.type === 'member').sort(byName)
@@ -27,9 +30,9 @@ function exportXLSX(state: AppState) {
 
   const ledgerSheet = [
     ['No', 'Nama', 'Harian Price', 'Ball Usage Price', 'Total to Pay'],
-    ...members.map((p, i) => [i + 1, p.name, 0, p.totalCost, p.totalCost]),
+    ...members.map((p, i) => [i + 1, p.name, 0, ballUsage(p), ballUsage(p)]),
     [],
-    ...harians.map((p, i) => [i + 1, p.name, state.harianFee, p.totalCost - state.harianFee, p.totalCost]),
+    ...harians.map((p, i) => [i + 1, p.name, state.harianFee, ballUsage(p), state.harianFee + ballUsage(p)]),
   ]
 
   const wb = XLSX.utils.book_new()
@@ -46,10 +49,12 @@ function initials(name: string) {
 
 export function LedgerPanel({ state, open, onClose }: Props) {
   const totalShuttles = state.matches.reduce((sum, m) => sum + (m.shuttlesUsed ?? 0), 0)
-  const totalCost = state.players.reduce((sum, p) => sum + p.totalCost, 0)
+  const matchCost = matchCostByPlayer(state)
+  const total = (p: Player) => playerTotal(state, p, matchCost)
+  const totalCost = state.players.reduce((sum, p) => sum + total(p), 0)
   const rows = [...state.players]
-    .filter(p => p.gamesPlayed > 0 || p.totalCost > 0)
-    .sort((a, b) => b.totalCost - a.totalCost)
+    .filter(p => p.gamesPlayed > 0 || total(p) > 0)
+    .sort((a, b) => total(b) - total(a))
 
   return (
     <div className={`right-panel${open ? ' open' : ''}`}>
@@ -87,7 +92,7 @@ export function LedgerPanel({ state, open, onClose }: Props) {
                     {p.skill} · {(p.type ?? 'member') === 'harian' ? 'Harian' : 'Member'} · {p.gamesPlayed}x main
                   </div>
                 </div>
-                <div className="ledger-cost">{rp(p.totalCost)}</div>
+                <div className="ledger-cost">{rp(total(p))}</div>
               </div>
             ))}
           </>
