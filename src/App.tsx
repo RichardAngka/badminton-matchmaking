@@ -48,6 +48,11 @@ export function App() {
   const mainTab: Tab = ROUTE_TAB[pathname] ?? 'lapangan'
   const setMainTab = (tab: Tab) => navigate(TAB_ROUTE[tab])
 
+  const anyModalOpen = queueOpen || editingQueueIdx !== null || assignQueueIdx !== null || configOpen || editingMatch !== null || ledgerOpen
+  useEffect(() => {
+    document.body.style.overflow = anyModalOpen ? 'hidden' : ''
+  }, [anyModalOpen])
+
   const isAdmin = useIsAdmin()
   const isHistorical = selectedDate !== TODAY
 
