@@ -1007,56 +1007,58 @@ function AddToQueueModal({ state, initialSelected, submitLabel, onSubmit, onClos
                 )
               })()}
             </div>
-
-            {selected.length > 0 && (
-              <div style={{ fontSize: 12, color: 'var(--muted)', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <span style={{ color: 'var(--gold)' }}>
-                  Tim 1: {selected.slice(0,2).map(id => state.players.find(p => p.id === id)?.name ?? '?').join(' · ')}
-                </span>
-                {selected.length > 2 && (
-                  <span style={{ color: '#4fc3f7' }}>
-                    Tim 2: {selected.slice(2,4).map(id => state.players.find(p => p.id === id)?.name ?? '?').join(' · ')}
-                  </span>
-                )}
-              </div>
-            )}
-
-            {skippedFirst ? (
-              <div style={{ background: 'rgba(255,200,0,0.08)', border: '1px solid var(--gold)', borderRadius: 8, padding: 12 }}>
-                <div style={{ fontSize: 13, color: 'var(--gold)', fontWeight: 700, marginBottom: 6 }}>⚠ Peringatan</div>
-                <div style={{ fontSize: 12, color: 'var(--text)', marginBottom: 10 }}>
-                  pemain <strong>{skippedFirst}</strong> sudah lama berhenti, pertimbangkan untuk set ulang
-                </div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button className="btn btn-primary" style={{ flex: 1 }} onClick={proceedWithConflictCheck}>Lanjutkan</button>
-                  <button className="btn btn-ghost" onClick={() => setSkippedFirst(null)}>Ganti Pemain</button>
-                </div>
-              </div>
-            ) : warning ? (
-              <div style={{ background: 'rgba(255,200,0,0.08)', border: '1px solid var(--gold)', borderRadius: 8, padding: 12 }}>
-                <div style={{ fontSize: 13, color: 'var(--gold)', fontWeight: 700, marginBottom: 6 }}>⚠ Peringatan</div>
-                <div style={{ fontSize: 12, color: 'var(--text)', marginBottom: 10, textTransform: 'capitalize' }}>{warning}. Tetap lanjutkan?</div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => onSubmit(selected as [string, string, string, string])}>
-                    Lanjutkan
-                  </button>
-                  <button className="btn btn-ghost" onClick={() => setWarning(null)}>Ganti Pemain</button>
-                </div>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  className="btn btn-primary"
-                  style={{ flex: 1 }}
-                  disabled={!ready}
-                  onClick={checkAndSubmit}
-                >
-                  {submitLabel ?? 'Tambah ke Antrian'}
-                </button>
-                <button className="btn btn-ghost" onClick={onClose}>Batal</button>
-              </div>
-            )}
           </div>
+        </div>
+
+        <div className="modal-footer">
+          {selected.length > 0 && (
+            <div style={{ fontSize: 12, color: 'var(--muted)', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ color: 'var(--gold)' }}>
+                Tim 1: {selected.slice(0,2).map(id => state.players.find(p => p.id === id)?.name ?? '?').join(' · ')}
+              </span>
+              {selected.length > 2 && (
+                <span style={{ color: '#4fc3f7' }}>
+                  Tim 2: {selected.slice(2,4).map(id => state.players.find(p => p.id === id)?.name ?? '?').join(' · ')}
+                </span>
+              )}
+            </div>
+          )}
+
+          {skippedFirst ? (
+            <div style={{ background: 'rgba(255,200,0,0.08)', border: '1px solid var(--gold)', borderRadius: 8, padding: 12 }}>
+              <div style={{ fontSize: 13, color: 'var(--gold)', fontWeight: 700, marginBottom: 6 }}>⚠ Peringatan</div>
+              <div style={{ fontSize: 12, color: 'var(--text)', marginBottom: 10 }}>
+                pemain <strong>{skippedFirst}</strong> sudah lama berhenti, pertimbangkan untuk set ulang
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="btn btn-primary" style={{ flex: 1 }} onClick={proceedWithConflictCheck}>Lanjutkan</button>
+                <button className="btn btn-ghost" onClick={() => setSkippedFirst(null)}>Ganti Pemain</button>
+              </div>
+            </div>
+          ) : warning ? (
+            <div style={{ background: 'rgba(255,200,0,0.08)', border: '1px solid var(--gold)', borderRadius: 8, padding: 12 }}>
+              <div style={{ fontSize: 13, color: 'var(--gold)', fontWeight: 700, marginBottom: 6 }}>⚠ Peringatan</div>
+              <div style={{ fontSize: 12, color: 'var(--text)', marginBottom: 10, textTransform: 'capitalize' }}>{warning}. Tetap lanjutkan?</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => onSubmit(selected as [string, string, string, string])}>
+                  Lanjutkan
+                </button>
+                <button className="btn btn-ghost" onClick={() => setWarning(null)}>Ganti Pemain</button>
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                className="btn btn-primary"
+                style={{ flex: 1 }}
+                disabled={!ready}
+                onClick={checkAndSubmit}
+              >
+                {submitLabel ?? 'Tambah ke Antrian'}
+              </button>
+              <button className="btn btn-ghost" onClick={onClose}>Batal</button>
+            </div>
+          )}
         </div>
       </div>
     </div>
