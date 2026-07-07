@@ -465,6 +465,7 @@ body::before {
 .mh-player.right { flex-direction: row-reverse; }
 .mh-score-box  { background: var(--bg); border-radius: var(--radius-sm); padding: 8px 10px; text-align: center; }
 .mh-score-vs   { font-size: 9px; color: var(--dim); margin-bottom: 4px; }
+.mh-score-line { display: flex; align-items: center; gap: 6px; }
 .mh-score-num  { font-size: 22px; font-weight: 800; line-height: 1.1; }
 .mh-score-dash { font-size: 11px; color: var(--dim); line-height: 1; }
 

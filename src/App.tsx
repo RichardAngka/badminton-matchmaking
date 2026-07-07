@@ -557,11 +557,13 @@ export function App() {
                           </div>
                           <div className="mh-score-box">
                             <div className="mh-score-vs">vs</div>
-                            {m.score ? <>
-                              <div className="mh-score-num" style={{ color: n1 >= n2 ? 'var(--text)' : 'var(--gold)' }}>{s1}</div>
-                              <div className="mh-score-dash">—</div>
-                              <div className="mh-score-num" style={{ color: n2 > n1 ? 'var(--text)' : 'var(--gold)' }}>{s2}</div>
-                            </> : <div style={{ color: 'var(--dim)', fontSize: 13 }}>—</div>}
+                            {m.score ? (
+                              <div className="mh-score-line">
+                                <div className="mh-score-num" style={{ color: n1 >= n2 ? 'var(--text)' : 'var(--gold)' }}>{s1}</div>
+                                <div className="mh-score-dash">—</div>
+                                <div className="mh-score-num" style={{ color: n2 > n1 ? 'var(--text)' : 'var(--gold)' }}>{s2}</div>
+                              </div>
+                            ) : <div style={{ color: 'var(--dim)', fontSize: 13 }}>—</div>}
                           </div>
                           <div className="mh-team-col right">
                             {m.team2.map(id => { const p = pl(id); return <div key={id} className="mh-player right"><span>{p?.name ?? '?'}</span><span className={`skill-badge skill-${p?.skill ?? 'B1'}`}>{p?.skill ?? '?'}</span></div> })}
