@@ -591,7 +591,20 @@ body::before {
   margin-bottom: 3px;
 }
 .player-item-meta { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
+.player-item-times { display: flex; align-items: center; gap: 6px; margin-top: 3px; flex-wrap: wrap; }
 .player-actions { display: flex; gap: 4px; flex-shrink: 0; }
+
+.time-badge {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 600;
+  padding: 1px 5px; border-radius: 3px;
+  white-space: nowrap;
+}
+.time-badge-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+.time-badge-in { background: rgba(0, 200, 118, .12); color: var(--green); }
+.time-badge-in .time-badge-dot { background: var(--green); }
+.time-badge-out { background: rgba(139, 144, 160, .14); color: var(--dim); }
+.time-badge-out .time-badge-dot { background: var(--dim); }
 
 /* ── Add player form ── */
 .add-player-form { padding: 14px 16px; border-top: 1px solid var(--border-s); background: var(--card); }

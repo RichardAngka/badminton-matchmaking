@@ -196,9 +196,21 @@ export function PlayerPanel({ open, onClose, state, onUpdate, inline, canWrite =
                 </span>
                 <span>{p.gamesPlayed}x</span>
                 {p.totalCost > 0 && <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10 }}>Rp {p.totalCost.toLocaleString('id-ID')}</span>}
-                {p.checkInTime != null && <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: 'var(--dim)' }}>↑{new Date(p.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}</span>}
-                {p.checkOutTime != null && <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: 'var(--dim)' }}>↓{new Date(p.checkOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}</span>}
               </div>
+              {(p.checkInTime != null || p.checkOutTime != null) && (
+                <div className="player-item-times">
+                  {p.checkInTime != null && (
+                    <span className="time-badge time-badge-in">
+                      <span className="time-badge-dot" />Check-in: {new Date(p.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
+                    </span>
+                  )}
+                  {p.checkOutTime != null && (
+                    <span className="time-badge time-badge-out">
+                      <span className="time-badge-dot" />Check-out: {new Date(p.checkOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           )}
           <div className="player-actions">
