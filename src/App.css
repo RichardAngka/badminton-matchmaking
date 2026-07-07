@@ -126,6 +126,10 @@ body::before {
 }
 .player-count-badge strong { color: var(--gold); }
 
+/* ── Check-in / Check-out member buttons ── */
+.checkinout-btn { padding-left: 8px; padding-right: 8px; }
+@media (min-width: 640px) { .checkinout-btn { padding-left: 16px; padding-right: 16px; } }
+
 /* ── Buttons ── */
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;

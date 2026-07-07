@@ -9,6 +9,7 @@ interface Props {
   state: AppState
   onUpdate: (s: AppState) => void
   inline?: boolean
+  canWrite?: boolean
 }
 
 const STATUS_ORDER: Record<PlayerStatus, number> = { Waiting: 0, Playing: 1, Left: 2 }
@@ -25,7 +26,7 @@ const labelStyle: React.CSSProperties = {
   letterSpacing: '.12em', color: 'var(--muted)', marginBottom: 6, textTransform: 'uppercase',
 }
 
-export function PlayerPanel({ open, onClose, state, onUpdate, inline }: Props) {
+export function PlayerPanel({ open, onClose, state, onUpdate, inline, canWrite = true }: Props) {
   const isAdmin = useIsAdmin()
   const [name, setName] = useState('')
   const [skill, setSkill] = useState<SkillLevel>('B1')
@@ -59,7 +60,7 @@ export function PlayerPanel({ open, onClose, state, onUpdate, inline }: Props) {
   }
 
   function addPlayer() {
-    if (!isAdmin || !name.trim()) return
+    if (!canWrite || !name.trim()) return
     const now = Date.now()
     const restTimes = state.players
       .filter(p => p.status === 'Waiting' && p.restingSince != null)
@@ -69,15 +70,17 @@ export function PlayerPanel({ open, onClose, state, onUpdate, inline }: Props) {
     const restingSince = restTimes.length >= 2
       ? restTimes[1] + Math.random() * (restTimes[restTimes.length - 1] - restTimes[1])
       : now
+    const type: PlayerType = isAdmin ? playerType : 'member'
     const player: Player = {
       id: crypto.randomUUID(),
       name: name.trim(),
       skill, gender,
-      type: playerType,
+      type,
       status: 'Waiting',
       checkInTime: now,
+      checkOutTime: null,
       restingSince,
-      totalCost: playerType === 'harian' ? (state.harianFee ?? 25000) : 0,
+      totalCost: type === 'harian' ? (state.harianFee ?? 25000) : 0,
       gamesPlayed: 0,
     }
     onUpdate({ ...state, players: [...state.players, player] })
@@ -90,13 +93,19 @@ export function PlayerPanel({ open, onClose, state, onUpdate, inline }: Props) {
   }
 
   function markLeft(p: Player) {
-    if (!isAdmin || p.status === 'Playing') return
+    if (!canWrite || p.status === 'Playing') return
     const newStatus: PlayerStatus = p.status === 'Left' ? 'Waiting' : 'Left'
     onUpdate({
       ...state,
       players: state.players.map(pl =>
         pl.id === p.id
-          ? { ...pl, status: newStatus, restingSince: newStatus === 'Waiting' ? Date.now() : pl.restingSince }
+          ? {
+              ...pl,
+              status: newStatus,
+              restingSince: newStatus === 'Waiting' ? Date.now() : pl.restingSince,
+              checkInTime: newStatus === 'Waiting' ? Date.now() : pl.checkInTime,
+              checkOutTime: newStatus === 'Left' ? Date.now() : pl.checkOutTime,
+            }
           : pl
       ),
     })
@@ -187,39 +196,40 @@ export function PlayerPanel({ open, onClose, state, onUpdate, inline }: Props) {
                 </span>
                 <span>{p.gamesPlayed}x</span>
                 {p.totalCost > 0 && <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10 }}>Rp {p.totalCost.toLocaleString('id-ID')}</span>}
+                {p.checkInTime != null && <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: 'var(--dim)' }}>↑{new Date(p.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}</span>}
+                {p.checkOutTime != null && <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: 'var(--dim)' }}>↓{new Date(p.checkOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}</span>}
               </div>
             </div>
           )}
-          {isAdmin && (
-            <div className="player-actions">
-              {editId !== p.id && (
-                <Button
-                  variant="tertiary"
-                  size="icon-lg"
-                  onClick={() => startEdit(p)}
-                  title="Edit pemain"
-                >✏</Button>
-              )}
-              {p.status !== 'Playing' && editId !== p.id && (
-                <Button
-                  variant={p.status === 'Left' ? 'secondary' : 'tertiary'}
-                  size="icon-lg"
-                  onClick={() => markLeft(p)}
-                  title={p.status === 'Left' ? 'Check-in kembali' : 'Tandai pulang'}
-                >
-                  {p.status === 'Left' ? '↩' : '→'}
-                </Button>
-              )}
-              {p.status !== 'Playing' && editId !== p.id && (
-                <Button
-                  variant="destructive"
-                  size="icon-lg"
-                  onClick={() => deletePlayer(p.id)}
-                  title="Hapus pemain"
-                >✕</Button>
-              )}
-            </div>
-          )}
+          <div className="player-actions">
+            {isAdmin && editId !== p.id && (
+              <Button
+                variant="tertiary"
+                size="icon-lg"
+                onClick={() => startEdit(p)}
+                title="Edit pemain"
+              >✏</Button>
+            )}
+            {p.status !== 'Playing' && editId !== p.id && (
+              <Button
+                variant="default"
+                size={isAdmin ? 'icon-lg' : 'sm'}
+                className={!isAdmin ? 'checkinout-btn' : undefined}
+                onClick={() => markLeft(p)}
+                title={p.status === 'Left' ? 'Check-in kembali' : 'Tandai pulang'}
+              >
+                {p.status === 'Left' ? (isAdmin ? '↩' : 'Check-in') : (isAdmin ? '→' : 'Check-out')}
+              </Button>
+            )}
+            {isAdmin && p.status !== 'Playing' && editId !== p.id && (
+              <Button
+                variant="destructive"
+                size="icon-lg"
+                onClick={() => deletePlayer(p.id)}
+                title="Hapus pemain"
+              >✕</Button>
+            )}
+          </div>
         </div>
       ))}
       {displayed.length === 0 && state.players.length > 0 && (
@@ -259,12 +269,14 @@ export function PlayerPanel({ open, onClose, state, onUpdate, inline }: Props) {
             <option value="M">M — Pria</option><option value="F">F — Wanita</option>
           </select>
         </div>
-        <div className="form-field">
-          <label>Tipe</label>
-          <select value={playerType} onChange={e => setPlayerType(e.target.value as PlayerType)}>
-            <option value="member">Member</option><option value="harian">Harian (+Rp 25.000)</option>
-          </select>
-        </div>
+        {isAdmin && (
+          <div className="form-field">
+            <label>Tipe</label>
+            <select value={playerType} onChange={e => setPlayerType(e.target.value as PlayerType)}>
+              <option value="member">Member</option><option value="harian">Harian (+Rp 25.000)</option>
+            </select>
+          </div>
+        )}
       </div>
       <Button className="w-full" onClick={addPlayer}>Check-In Pemain</Button>
     </div>
@@ -312,13 +324,15 @@ export function PlayerPanel({ open, onClose, state, onUpdate, inline }: Props) {
                 <option value="F">F — Wanita</option>
               </select>
             </div>
-            <div>
-              <label style={labelStyle}>Tipe</label>
-              <select value={playerType} onChange={e => setPlayerType(e.target.value as PlayerType)} style={fieldStyle}>
-                <option value="member">Member</option>
-                <option value="harian">Harian (+Rp 25.000)</option>
-              </select>
-            </div>
+            {isAdmin && (
+              <div>
+                <label style={labelStyle}>Tipe</label>
+                <select value={playerType} onChange={e => setPlayerType(e.target.value as PlayerType)} style={fieldStyle}>
+                  <option value="member">Member</option>
+                  <option value="harian">Harian (+Rp 25.000)</option>
+                </select>
+              </div>
+            )}
           </div>
 
           <Button
@@ -346,7 +360,7 @@ export function PlayerPanel({ open, onClose, state, onUpdate, inline }: Props) {
         <div style={{ paddingBottom: 96 }}>{playerList}</div>
 
         {/* Floating + button, right-anchored */}
-        {isAdmin && <button
+        {canWrite && <button
           onClick={() => setShowForm(true)}
           style={{
             position: 'fixed', bottom: 80, right: 20,
@@ -377,7 +391,7 @@ export function PlayerPanel({ open, onClose, state, onUpdate, inline }: Props) {
         </div>
         {filterChips}
         {playerList}
-        {isAdmin && addForm}
+        {canWrite && addForm}
       </div>
     </>
   )

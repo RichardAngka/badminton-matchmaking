@@ -11,6 +11,7 @@ export interface Player {
   type: PlayerType
   status: PlayerStatus
   checkInTime: number | null
+  checkOutTime: number | null
   restingSince: number | null
   totalCost: number  // IDR, always integer
   gamesPlayed: number
