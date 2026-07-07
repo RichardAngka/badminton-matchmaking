@@ -372,7 +372,7 @@ export function PlayerPanel({ open, onClose, state, onUpdate, inline, canWrite =
         <div style={{ paddingBottom: 96 }}>{playerList}</div>
 
         {/* Floating + button, right-anchored */}
-        {canWrite && <button
+        {canWrite && isAdmin && <button
           onClick={() => setShowForm(true)}
           style={{
             position: 'fixed', bottom: 80, right: 20,
@@ -403,7 +403,7 @@ export function PlayerPanel({ open, onClose, state, onUpdate, inline, canWrite =
         </div>
         {filterChips}
         {playerList}
-        {canWrite && addForm}
+        {canWrite && isAdmin && addForm}
       </div>
     </>
   )
