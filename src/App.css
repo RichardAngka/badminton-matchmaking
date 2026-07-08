@@ -315,7 +315,8 @@ body::before {
   padding: 9px 13px;
   border-top: 1px solid var(--border);
   background: rgba(3,9,18,.4);
-  display: flex; gap: 7px; align-items: center;
+  display: flex; flex-wrap: wrap; gap: 7px; align-items: center;
+  justify-content: space-between;
 }
 .end-match-form input {
   background: var(--card-hi);
@@ -328,8 +329,8 @@ body::before {
   min-height: 34px;
 }
 .end-match-form input:focus { outline: none; border-color: var(--gold); }
-.shuttle-input { width: 60px; text-align: center; }
-.score-input   { flex: 1; min-width: 80px; }
+.shuttle-input { width: calc(4ch + 18px); text-align: center; }
+.score-input   { width: calc(4ch + 18px); text-align: center; }
 
 .empty-court-msg {
   padding: 28px 14px;
@@ -464,6 +465,7 @@ body::before {
 .mh-player.right { flex-direction: row-reverse; }
 .mh-score-box  { background: var(--bg); border-radius: var(--radius-sm); padding: 8px 10px; text-align: center; }
 .mh-score-vs   { font-size: 9px; color: var(--dim); margin-bottom: 4px; }
+.mh-score-line { display: flex; align-items: center; gap: 6px; }
 .mh-score-num  { font-size: 22px; font-weight: 800; line-height: 1.1; }
 .mh-score-dash { font-size: 11px; color: var(--dim); line-height: 1; }
 
@@ -647,6 +649,8 @@ body::before {
   border: 1px solid var(--border-s);
   border-radius: var(--radius);
   width: 100%; max-width: 430px;
+  max-height: calc(100dvh - 32px);
+  display: flex; flex-direction: column;
   overflow: hidden;
   box-shadow: 0 0 0 1px rgba(0,123,255,.1), 0 24px 80px rgba(0,0,0,.6);
 }
@@ -655,12 +659,19 @@ body::before {
   border-bottom: 1px solid var(--border);
   background: var(--card-hi);
   display: flex; justify-content: space-between; align-items: center;
+  flex-shrink: 0;
 }
 .modal-header h2 {
   font-family: 'Inter', sans-serif;
   font-size: 15px; font-weight: 800; text-transform: uppercase; letter-spacing: .1em;
 }
-.modal-body { padding: 16px; }
+.modal-body { padding: 16px; overflow-y: auto; }
+.modal-footer {
+  padding: 16px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+  display: flex; flex-direction: column; gap: 12px;
+}
 
 .config-form { display: flex; flex-direction: column; gap: 14px; }
 .config-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); margin-bottom: 4px; display: block; }

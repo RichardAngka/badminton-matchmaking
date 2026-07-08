@@ -196,7 +196,6 @@ export function CourtCard({ courtId, match, players, upcoming, onEndMatch, onEdi
                   value={scoreL}
                   onChange={e => { const v = e.target.value.replace(/\D/g, ''); setScoreL(v); if (v.length === 2) refScoreR.current?.focus() }}
                   onKeyDown={e => e.key === 'Enter' && refScoreR.current?.focus()}
-                  style={{ width: 52 }}
                 />
                 <span style={{ color: 'var(--muted)', flexShrink: 0 }}>–</span>
                 <input
@@ -207,12 +206,12 @@ export function CourtCard({ courtId, match, players, upcoming, onEndMatch, onEdi
                   value={scoreR}
                   onChange={e => { const v = e.target.value.replace(/\D/g, ''); setScoreR(v); if (v.length === 2) refSelesai.current?.focus() }}
                   onKeyDown={e => e.key === 'Enter' && handleEnd()}
-                  style={{ width: 52 }}
                 />
               </div>
               <Button
                 ref={refSelesai}
                 size="sm"
+                className="basis-full"
                 onClick={handleEnd}
                 disabled={shuttles === '' || +shuttles < 0}
               >

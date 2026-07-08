@@ -7,4 +7,8 @@ export default defineConfig({
   plugins: [tailwindcss(), react()],
   server: { port: Number(process.env.PORT) || 5174 },
   resolve: { alias: { '@': path.resolve(__dirname, './src') } },
+  optimizeDeps: {
+    include: ['lucide-react'],
+    esbuildOptions: { mainFields: ['module', 'main'] },
+  },
 })
