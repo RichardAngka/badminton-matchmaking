@@ -117,22 +117,22 @@ export function App() {
   }
 
   function addToQueue(four: [string, string, string, string]) {
-    if (isHistorical || !isAdmin) return
+    if (!isAdmin) return
     mut.mutate({ ...state, pregenerated: [...(state.pregenerated ?? []), four] })
   }
 
   function removeFromQueue(idx: number) {
-    if (isHistorical || !isAdmin) return
+    if (!isAdmin) return
     mut.mutate({ ...state, pregenerated: (state.pregenerated ?? []).filter((_, i) => i !== idx) })
   }
 
   function replaceInQueue(idx: number, four: [string, string, string, string]) {
-    if (isHistorical || !isAdmin) return
+    if (!isAdmin) return
     mut.mutate({ ...state, pregenerated: (state.pregenerated ?? []).map((item, i) => i === idx ? four : item) })
   }
 
   function generateOneToQueue() {
-    if (isHistorical || !isAdmin) return
+    if (!isAdmin) return
     const { pastPairs, pastOpponents } = buildPastSets(state.matches)
     const four = findBestFour(availableForQueue, pastPairs, pastOpponents)
     if (!four) return
@@ -140,7 +140,7 @@ export function App() {
   }
 
   function startFromQueue(queueIdx: number, courtId: number) {
-    if (isHistorical || !isAdmin) return
+    if (!isAdmin) return
     const queue = state.pregenerated ?? []
     const four = queue[queueIdx]
       ?.map(id => state.players.find(p => p.id === id && p.status === 'Waiting'))
@@ -201,7 +201,7 @@ export function App() {
   }
 
   function editMatchPlayers(matchId: string, team1: [string, string], team2: [string, string]) {
-    if (isHistorical || !isAdmin) return
+    if (!isAdmin) return
     const match = state.matches.find(m => m.id === matchId)!
     const oldIds = new Set([...match.team1, ...match.team2])
     const newIds = new Set([...team1, ...team2])
@@ -217,7 +217,7 @@ export function App() {
   }
 
   function endMatch(matchId: string, shuttlesUsed: number, score: string) {
-    if (isHistorical || !isAdmin) return
+    if (!isAdmin) return
     const match = state.matches.find(m => m.id === matchId)!
     const costPerPlayer = Math.round((shuttlesUsed * state.shuttlePrice) / 4)
     const playerIds = new Set([...match.team1, ...match.team2])
@@ -327,14 +327,14 @@ export function App() {
             </div>
             <button className="icon-btn" onClick={() => setLedgerOpen(true)} title="Live Ledger"><Icon name="wallet" /></button>
             {isAdmin && <button className="icon-btn" onClick={() => setConfigOpen(true)} title="Konfigurasi"><Icon name="gear" /></button>}
-            <button className="btn btn-primary new-match-btn" onClick={() => setQueueOpen(true)} disabled={isHistorical || !isAdmin}>
+            <button className="btn btn-primary new-match-btn" onClick={() => setQueueOpen(true)} disabled={!isAdmin}>
               <Icon name="plus" /> New Match
             </button>
           </div>
         </header>
 
         <div className="workspace-body">
-          {!isHistorical && isAdmin && (mainTab === 'lapangan' || mainTab === 'antrian') && (
+          {isAdmin && (mainTab === 'lapangan' || mainTab === 'antrian') && (
             <div className="controls-bar">
               <button
                 className="btn btn-primary btn-sm"
@@ -385,9 +385,9 @@ export function App() {
                         match={match}
                         players={state.players}
                         upcoming={upcoming}
-                        onEndMatch={(isHistorical || !isAdmin) ? undefined : endMatch}
-                        onEditPlayers={(isHistorical || !isAdmin) ? undefined : editMatchPlayers}
-                        onStart={(!isHistorical && isAdmin && capturedIdx !== undefined) ? () => startFromQueue(capturedIdx, courtId) : undefined}
+                        onEndMatch={isAdmin ? endMatch : undefined}
+                        onEditPlayers={isAdmin ? editMatchPlayers : undefined}
+                        onStart={(isAdmin && capturedIdx !== undefined) ? () => startFromQueue(capturedIdx, courtId) : undefined}
                       />
                     )
                   })
