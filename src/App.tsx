@@ -413,7 +413,7 @@ export function App() {
                 <div className="activity-list">
                   {[...finished].sort((a, b) => b.matchNumber - a.matchNumber).slice(0, 5).map(m => (
                     <div key={m.id} className="activity-row"
-                      onClick={() => !isHistorical && isAdmin && setEditingMatch({ id: m.id, bola: m.shuttlesUsed ?? 0, scoreL: (m.score ?? '').split('-')[0] ?? '', scoreR: (m.score ?? '').split('-')[1] ?? '' })}>
+                      onClick={() => isAdmin && setEditingMatch({ id: m.id, bola: m.shuttlesUsed ?? 0, scoreL: (m.score ?? '').split('-')[0] ?? '', scoreR: (m.score ?? '').split('-')[1] ?? '' })}>
                       <div className="activity-icon"><Icon name="flag" /></div>
                       <div className="activity-main">
                         <div className="activity-title">Match #{m.matchNumber}<span style={{ color: 'var(--dim)', fontWeight: 500 }}>· Court {m.courtId}</span>{m.endTime && <span className="match-timer">{fmtDur(m.endTime - m.startTime)}</span>}</div>
@@ -493,11 +493,11 @@ export function App() {
                   const n = (id: string) => state.players.find(p => p.id === id)?.name ?? '?'
                   const allReady = four.every(id => state.players.find(p => p.id === id)?.status === 'Waiting')
                   return (
-                    <div key={idx} className="mh-card" style={{ borderLeft: '3px solid var(--gold)', cursor: (!isHistorical && isAdmin) ? 'pointer' : undefined }}
-                      onClick={() => !isHistorical && isAdmin && setEditingQueueIdx(idx)}>
+                    <div key={idx} className="mh-card" style={{ borderLeft: '3px solid var(--gold)', cursor: isAdmin ? 'pointer' : undefined }}
+                      onClick={() => isAdmin && setEditingQueueIdx(idx)}>
                       <div className="mh-card-header">
                         <span className="mh-num">#{idx + 1}</span>
-                        {!isHistorical && isAdmin && (
+                        {isAdmin && (
                           <button onClick={e => { e.stopPropagation(); removeFromQueue(idx) }}
                             style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: 13, padding: '0 2px', lineHeight: 1 }}>✕</button>
                         )}
@@ -505,7 +505,7 @@ export function App() {
                       <div className="mh-team" style={{ color: 'var(--gold)' }}>{n(four[0])} · {n(four[1])}</div>
                       <div className="mh-vs">vs</div>
                       <div className="mh-team" style={{ color: '#4fc3f7' }}>{n(four[2])} · {n(four[3])}</div>
-                      {!isHistorical && isAdmin && (
+                      {isAdmin && (
                         <div style={{ display: 'flex', gap: 4, marginTop: 6 }} onClick={e => e.stopPropagation()}>
                           <button
                             className="btn btn-primary btn-sm"
@@ -541,15 +541,15 @@ export function App() {
                     const n1 = parseInt(s1 ?? '0'), n2 = parseInt(s2 ?? '0')
                     return (
                       <div key={m.id} className="mh-card"
-                        style={{ borderLeft: `3px solid ${TYPE_COLOR[t1t]}`, ...(!isHistorical && isAdmin ? { cursor: 'pointer' } : {}) }}
-                        onClick={() => !isHistorical && isAdmin && setEditingMatch({ id: m.id, bola: m.shuttlesUsed ?? 0, scoreL: s1 ?? '', scoreR: s2 ?? '' })}
+                        style={{ borderLeft: `3px solid ${TYPE_COLOR[t1t]}`, ...(isAdmin ? { cursor: 'pointer' } : {}) }}
+                        onClick={() => isAdmin && setEditingMatch({ id: m.id, bola: m.shuttlesUsed ?? 0, scoreL: s1 ?? '', scoreR: s2 ?? '' })}
                       >
                         <div className="mh-card-header">
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                             <span className="mh-num">#{m.matchNumber}</span>
                             <span style={{ fontSize: 10, fontWeight: 700, color: TYPE_COLOR[t1t], background: 'var(--bg)', padding: '1px 6px', borderRadius: 3 }}>{t1t}</span>
                           </div>
-                          <span className="mh-status">✓ Selesai{!isHistorical && isAdmin && ` · ${m.shuttlesUsed ?? 0} bola ✏`}{m.endTime && <span className="match-timer" style={{ marginLeft: 6 }}>{fmtDur(m.endTime - m.startTime)}</span>}</span>
+                          <span className="mh-status">✓ Selesai{isAdmin && ` · ${m.shuttlesUsed ?? 0} bola ✏`}{m.endTime && <span className="match-timer" style={{ marginLeft: 6 }}>{fmtDur(m.endTime - m.startTime)}</span>}</span>
                         </div>
                         <div className="mh-body">
                           <div className="mh-team-col">
@@ -582,8 +582,8 @@ export function App() {
               open={false}
               onClose={() => setMainTab('lapangan')}
               state={state}
-              onUpdate={s => { if (!isHistorical) mut.mutate(s) }}
-              canWrite={!isHistorical}
+              onUpdate={s => { if (!isHistorical || isAdmin) mut.mutate(s) }}
+              canWrite={!isHistorical || isAdmin}
             />
           )}
         </div>
