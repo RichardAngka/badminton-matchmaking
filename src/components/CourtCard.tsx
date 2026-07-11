@@ -9,6 +9,7 @@ interface Props {
   upcoming?: Player[]
   onEndMatch?: (matchId: string, shuttles: number, score: string) => void
   onEditPlayers?: (matchId: string, team1: [string, string], team2: [string, string]) => void
+  onCancelMatch?: (matchId: string) => void
   onStart?: () => void
 }
 
@@ -21,7 +22,7 @@ const fmt = (ms: number) => {
   return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
 }
 
-export function CourtCard({ courtId, match, players, upcoming, onEndMatch, onEditPlayers, onStart }: Props) {
+export function CourtCard({ courtId, match, players, upcoming, onEndMatch, onEditPlayers, onCancelMatch, onStart }: Props) {
   const [shuttles, setShuttles] = useState('')
   const [scoreL, setScoreL] = useState('')
   const [scoreR, setScoreR] = useState('')
@@ -75,8 +76,11 @@ export function CourtCard({ courtId, match, players, upcoming, onEndMatch, onEdi
           ? <><span className="match-num-badge">#{match.matchNumber}</span><span className="match-timer">{fmt(Date.now() - match.startTime)}</span></>
           : <span className="match-number">Menunggu pemain</span>
         }
+        {match && onCancelMatch && (
+          <Button variant="ghost" size="icon" onClick={() => onCancelMatch(match.id)} title="Batalkan match" className="ml-auto h-7 w-7">✕</Button>
+        )}
         {match && onEditPlayers && (
-          <Button variant="ghost" size="icon" onClick={startEdit} title="Edit pemain" className="ml-auto h-7 w-7">✏️</Button>
+          <Button variant="ghost" size="icon" onClick={startEdit} title="Edit pemain" className={onCancelMatch ? "h-7 w-7" : "ml-auto h-7 w-7"}>✏️</Button>
         )}
       </div>
 

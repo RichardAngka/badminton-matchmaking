@@ -6,7 +6,7 @@ import {
 } from './store'
 import { listRemoteSessions, supabase } from './supabase'
 import { findBestFour } from './matchmaker'
-import type { AppState, Player, PlayerStatus, TimeSlot } from './types'
+import type { AppState, Match, Player, PlayerStatus, TimeSlot } from './types'
 import { CourtCard } from './components/CourtCard'
 import { LedgerPanel } from './components/LedgerPanel'
 import { PlayerPanel, TYPE_COLOR, teamType } from './components/PlayerPanel'
@@ -197,12 +197,28 @@ export function App() {
     const playerIds = new Set([...match.team1, ...match.team2])
     mut.mutate({
       ...state,
-      matches: state.matches.filter(m => m.id !== matchId),
-      players: cost === 0 ? state.players : state.players.map(p =>
-        playerIds.has(p.id) ? { ...p, totalCost: p.totalCost - cost } : p
+      matchCounter: state.matchCounter - 1,
+      matches: closeMatchNumberGap(state.matches.filter(m => m.id !== matchId), match.matchNumber),
+      players: state.players.map(p =>
+        playerIds.has(p.id) ? { ...p, totalCost: p.totalCost - cost, gamesPlayed: p.gamesPlayed - 1 } : p
       ),
     })
     setEditingMatch(null)
+  }
+
+  function cancelMatch(matchId: string) {
+    if (isHistorical || !isAdmin) return
+    if (!confirm('Batalkan match ini? Pemain akan kembali ke status menunggu.')) return
+    const match = state.matches.find(m => m.id === matchId)!
+    const playerIds = new Set([...match.team1, ...match.team2])
+    mut.mutate({
+      ...state,
+      matchCounter: state.matchCounter - 1,
+      matches: closeMatchNumberGap(state.matches.filter(m => m.id !== matchId), match.matchNumber),
+      players: state.players.map(p =>
+        playerIds.has(p.id) ? { ...p, status: 'Waiting' as PlayerStatus } : p
+      ),
+    })
   }
 
   function editMatchPlayers(matchId: string, team1: [string, string], team2: [string, string]) {
@@ -392,6 +408,7 @@ export function App() {
                         upcoming={upcoming}
                         onEndMatch={(isHistorical || !isAdmin) ? undefined : endMatch}
                         onEditPlayers={(isHistorical || !isAdmin) ? undefined : editMatchPlayers}
+                        onCancelMatch={(isHistorical || !isAdmin) ? undefined : cancelMatch}
                         onStart={(!isHistorical && isAdmin && capturedIdx !== undefined) ? () => startFromQueue(capturedIdx, courtId) : undefined}
                       />
                     )
@@ -653,6 +670,10 @@ export function App() {
 }
 
 // ── Sidebar / rail / icon helpers ─────────────────────────────────────────────
+
+function closeMatchNumberGap(matches: Match[], removedNumber: number): Match[] {
+  return matches.map(m => m.matchNumber > removedNumber ? { ...m, matchNumber: m.matchNumber - 1 } : m)
+}
 
 function initials(name: string) {
   return name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
