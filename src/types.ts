@@ -46,3 +46,23 @@ export interface AppState {
   matchCounter: number
   pregenerated?: [string, string, string, string][]
 }
+
+// ── Internal tournament (/internal-match) ────────────────────────────────────
+// Standalone from Player/SkillLevel above: this roster is fixed, not per-session,
+// and W-B1/W-B2 are their own levels, NOT (B1|B2 + female) — Stefanny is one of
+// the 20 B1s, so deriving the women's levels from gender breaks the quota math.
+export type TourLevel = 'A1+' | 'A1' | 'A2' | 'B1' | 'B2' | 'W-B1' | 'W-B2'
+export type TeamId = 1 | 2 | 3 | 4
+
+export interface TourPlayer {
+  id: string
+  name: string
+  level: TourLevel
+  gender: Gender
+  team: TeamId | null
+}
+
+export interface TournamentState {
+  teamNames: Record<TeamId, string>
+  players: TourPlayer[]
+}

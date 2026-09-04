@@ -1063,3 +1063,184 @@ body::before {
   .auth-form { animation: none; }
   .auth-form button[type=submit]::before { display: none; }
 }
+
+/* ── Internal match (/internal-match) ──────────────────────────────────────── */
+.im-loading { color: var(--dim); font-size: 13px; padding: 24px 0; }
+
+/* Level badges: '+' and '-' are illegal in class names, so LEVEL_CLASS maps
+   each level to one of these instead of interpolating. */
+.lvl-badge {
+  display: inline-flex; align-items: center;
+  padding: 1px 5px; border-radius: var(--radius-xs);
+  font-size: 10px; font-weight: 800;
+  font-family: 'JetBrains Mono', monospace; letter-spacing: .04em;
+  flex-shrink: 0;
+}
+.lvl-ap  { background: #2A1500; color: #FFB020; border: 1px solid rgba(255,176,32,.4); }
+.lvl-a1  { background: var(--sa1bg); color: var(--sa1); border: 1px solid rgba(255,205,92,.35); }
+.lvl-a2  { background: var(--sa2bg); color: var(--sa2); border: 1px solid rgba(96,165,250,.25); }
+.lvl-b1  { background: var(--sb1bg); color: var(--sb1); border: 1px solid rgba(0,200,118,.25); }
+.lvl-b2  { background: var(--sb2bg); color: var(--sb2); border: 1px solid rgba(244,114,182,.3); }
+.lvl-wb1 { background: #1B0E24; color: #C084FC; border: 1px solid rgba(192,132,252,.3); }
+.lvl-wb2 { background: #22101B; color: #F9A8D4; border: 1px solid rgba(249,168,212,.3); }
+
+.im-pool-bar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 10px 13px;
+}
+.im-pool-label { font-size: 12px; font-weight: 800; letter-spacing: .01em; }
+.im-pool-label.ok  { color: var(--green); }
+.im-pool-label.bad { color: var(--red); }
+.im-pool-cell {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700;
+}
+.im-pool-cell.ok  { color: var(--dim); }
+.im-pool-cell.bad { color: var(--red); }
+.im-pool-total { margin-left: auto; font-size: 11.5px; color: var(--dim); white-space: nowrap; }
+
+.im-controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+.im-search {
+  flex: 1; min-width: 160px; min-height: 36px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  color: var(--text); font-size: 13px; padding: 0 11px; font-family: inherit;
+}
+.im-search:focus { outline: none; border-color: var(--gold-dim); }
+/* Segmented filter bar — one bordered track, 1px dividers, filled active
+   segment, count badge per segment. Scrolls sideways on narrow screens rather
+   than wrapping, so the track always reads as a single control. */
+.im-segmented {
+  display: flex; align-items: stretch; min-width: 0; max-width: 100%;
+  background: var(--card-lo);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  overflow-x: auto; scrollbar-width: none;
+}
+.im-segmented::-webkit-scrollbar { display: none; }
+.im-seg {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 0 11px; min-height: 36px;
+  background: none; border: none; border-left: 1px solid var(--border);
+  color: var(--dim); font-size: 12.5px; font-weight: 600;
+  font-family: inherit; cursor: pointer; white-space: nowrap;
+  transition: background .12s ease, color .12s ease;
+}
+.im-seg:first-child { border-left: none; }
+.im-seg:hover:not(.on) { background: var(--card); color: var(--text); }
+.im-seg.on { background: var(--card-hi); color: var(--text); }
+.im-seg:focus-visible { outline: 2px solid var(--gold-dim); outline-offset: -2px; }
+.im-seg-count {
+  font-family: 'JetBrains Mono', monospace; font-size: 10.5px; font-weight: 700;
+  background: var(--surface); color: var(--dim);
+  border: 1px solid var(--border); border-radius: 20px;
+  padding: 1px 6px; min-width: 22px; text-align: center;
+}
+.im-seg.on .im-seg-count {
+  background: var(--gold-bg); color: var(--gold); border-color: rgba(74,142,255,.3);
+}
+.im-actions { display: flex; gap: 6px; }
+
+.im-add { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+.im-add input, .im-add select, .im-row select, .im-row-input {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  color: var(--text); font-size: 13px; padding: 6px 9px; min-height: 34px; font-family: inherit;
+}
+.im-add input { flex: 1; min-width: 140px; }
+
+.im-group { margin-bottom: 14px; }
+.im-group-head {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
+  font-size: 11.5px; color: var(--dim); font-weight: 600;
+}
+.im-rows { display: flex; flex-direction: column; gap: 4px; }
+.im-row {
+  display: flex; align-items: center; gap: 7px;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 6px 9px; min-height: 44px;
+}
+.im-row-name { flex: 1; min-width: 0; font-size: 13px; font-weight: 600; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.im-row-input { flex: 1; min-width: 0; }
+.im-w {
+  font-size: 9px; font-weight: 800; padding: 1px 4px; border-radius: 3px; flex-shrink: 0;
+  background: rgba(249,168,212,.14); color: #F9A8D4;
+}
+
+.im-teamstrip { display: flex; gap: 3px; flex-shrink: 0; }
+.im-tbtn {
+  width: 30px; height: 30px; border-radius: var(--radius-xs);
+  background: var(--card-lo); border: 1px solid var(--border); color: var(--dim);
+  font-size: 12px; font-weight: 800; cursor: pointer; font-family: 'JetBrains Mono', monospace;
+}
+.im-tbtn:hover:not(:disabled) { border-color: var(--dim); color: var(--text); }
+.im-tbtn.on { background: var(--gold); border-color: var(--gold); color: #0A0800; }
+.im-tbtn.clear:disabled { opacity: .3; cursor: not-allowed; }
+.im-mini {
+  width: 30px; height: 30px; border-radius: var(--radius-xs); flex-shrink: 0;
+  background: none; border: 1px solid var(--border); color: var(--dim);
+  font-size: 12px; cursor: pointer;
+}
+.im-mini:hover { color: var(--text); border-color: var(--dim); }
+.im-mini.danger:hover { color: var(--red); border-color: var(--red); }
+
+/* Level group header inside a team card — count is colour-coded so a short
+   level reads at a glance without counting names. */
+.im-group-count { font-family: 'JetBrains Mono', monospace; font-weight: 700; }
+.im-group-count.ok    { color: var(--green); }
+.im-group-count.over  { color: var(--red); }
+.im-group-count.short { color: var(--dim); }
+.im-slot-empty {
+  font-size: 11.5px; color: var(--dim); opacity: .65; font-style: italic;
+  padding: 5px 9px; border: 1px dashed var(--border); border-radius: var(--radius-sm);
+}
+.im-team .im-group { margin-bottom: 10px; }
+.im-team .im-group:last-child { margin-bottom: 0; }
+
+.im-empty { color: var(--dim); font-size: 12.5px; padding: 14px 0; }
+.im-empty.sm { padding: 8px 0; font-size: 12px; }
+
+/* Team tabs — same segmented track as the filter, split evenly. */
+.im-tabs { width: 100%; margin-bottom: 12px; }
+.im-tabs .im-seg { flex: 1 1 0; justify-content: center; min-height: 42px; }
+/* Underline indicator — a fill shade alone reads too weakly, and a second
+   gold fill would fight the panel header below. */
+.im-tabs .im-seg.on { box-shadow: inset 0 -2px 0 var(--gold); color: var(--text); }
+.im-tab-label { overflow: hidden; text-overflow: ellipsis; }
+/* A complete team reads green from the tab bar, so tabs don't hide which
+   other teams are still short. */
+.im-seg.done .im-seg-count { color: var(--green); border-color: rgba(0,200,118,.35); }
+.im-seg.on.done .im-seg-count { background: rgba(0,200,118,.14); }
+
+/* Group panel — filled header bar over the member list. */
+.im-team {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); overflow: hidden;
+}
+.im-team.full { border-color: rgba(0,200,118,.4); }
+.im-team-head {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--gold); padding: 9px 12px;
+}
+.im-team-name {
+  flex: 1; min-width: 0; text-align: center;
+  font-size: 15px; font-weight: 800; color: #0A0800; letter-spacing: -.01em;
+  background: none; border: 1px solid transparent; border-radius: var(--radius-xs);
+  padding: 3px 8px; font-family: inherit;
+}
+.im-team-name:focus {
+  outline: none; background: rgba(255,255,255,.4); border-color: rgba(10,8,0,.25);
+}
+.im-team-count {
+  font-family: 'JetBrains Mono', monospace; font-size: 11.5px; font-weight: 800;
+  color: rgba(10,8,0,.62); flex-shrink: 0;
+}
+.im-team-count.ok { color: #0A5C36; }
+.im-team-body { padding: 12px; }
+@media (max-width: 640px) {
+  .im-segmented { flex: 1 1 100%; }
+  .im-tabs .im-seg { font-size: 11.5px; padding: 0 7px; }
+}
+@media (max-width: 480px) {
+  .im-pool-total { margin-left: 0; }
+  .im-tbtn { width: 34px; height: 34px; }
+}

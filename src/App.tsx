@@ -11,6 +11,7 @@ import { CourtCard } from './components/CourtCard'
 import { LedgerPanel } from './components/LedgerPanel'
 import { PlayerPanel, TYPE_COLOR, teamType } from './components/PlayerPanel'
 import { CalendarPicker } from './components/CalendarPicker'
+import { InternalMatch } from './components/InternalMatch'
 import { matchCostByPlayer, playerTotal } from './ledgerMath'
 import { useIsAdmin } from './RoleContext'
 
@@ -30,13 +31,14 @@ export function App() {
   const [waitingTab, setWaitingTab] = useState<'menunggu' | 'antrian'>('menunggu')
   const { pathname } = useLocation()
   const navigate = useNavigate()
-  type Tab = 'lapangan' | 'menunggu' | 'antrian' | 'riwayat' | 'pemain'
+  type Tab = 'lapangan' | 'menunggu' | 'antrian' | 'riwayat' | 'pemain' | 'internal'
   const ROUTE_TAB: Record<string, Tab> = {
     '/': 'lapangan',
     '/waiting-player': 'menunggu',
     '/waiting-list': 'antrian',
     '/history': 'riwayat',
     '/player': 'pemain',
+    '/internal-match': 'internal',
   }
   const TAB_ROUTE: Record<Tab, string> = {
     lapangan: '/',
@@ -44,6 +46,7 @@ export function App() {
     antrian: '/waiting-list',
     riwayat: '/history',
     pemain: '/player',
+    internal: '/internal-match',
   }
   const mainTab: Tab = ROUTE_TAB[pathname] ?? 'lapangan'
   const setMainTab = (tab: Tab) => navigate(TAB_ROUTE[tab])
@@ -265,6 +268,7 @@ export function App() {
     antrian:  { title: 'Antrian', sub: 'Match yang sudah disusun' },
     riwayat:  { title: 'Riwayat', sub: 'Pertandingan selesai hari ini' },
     pemain:   { title: 'Pemain', sub: 'Kelola pemain & check-in' },
+    internal: { title: 'Internal Match', sub: 'Turnamen internal — 80 pemain, 4 tim' },
   }
   const meta = TAB_META[mainTab]
   const nm = (id: string) => state.players.find(p => p.id === id)?.name ?? '?'
@@ -304,6 +308,9 @@ export function App() {
           <button className={`nav-item${mainTab === 'pemain' ? ' active' : ''}`} onClick={() => setMainTab('pemain')}>
             <Icon name="users" /><span>Pemain</span>
             {state.players.filter(p => p.status !== 'Left').length > 0 && <span className="nav-count">{state.players.filter(p => p.status !== 'Left').length}</span>}
+          </button>
+          <button className={`nav-item${mainTab === 'internal' ? ' active' : ''}`} onClick={() => setMainTab('internal')}>
+            <Icon name="trophy" /><span>Internal Match</span>
           </button>
         </nav>
         <div className="sidebar-foot">
@@ -592,6 +599,8 @@ export function App() {
             </div>
           )}
 
+          {mainTab === 'internal' && <InternalMatch />}
+
           {mainTab === 'pemain' && (
             <PlayerPanel
               inline
@@ -744,6 +753,7 @@ function Icon({ name }: { name: string }) {
     gear: <><circle cx="12" cy="12" r="3.3" /><path d="M12 2.4v3.1M12 18.5v3.1M21.6 12h-3.1M5.5 12H2.4M18.5 5.5l-2.2 2.2M7.7 16.3l-2.2 2.2M18.5 18.5l-2.2-2.2M7.7 7.7 5.5 5.5" /></>,
     wallet: <><rect x="3" y="6" width="18" height="13" rx="2.6" /><path d="M3 10.5h18" /><circle cx="16.5" cy="14.5" r="1.25" fill="currentColor" stroke="none" /></>,
     flag: <><path d="M4.5 21V4" /><path d="M4.5 4.5h12l-1.6 4 1.6 4h-12" /></>,
+    trophy: <><path d="M7 4h10v5a5 5 0 0 1-10 0V4z" /><path d="M7 6H4.5v1.5A3.5 3.5 0 0 0 8 11" /><path d="M17 6h2.5v1.5A3.5 3.5 0 0 1 16 11" /><path d="M12 14v3M8.5 20h7M10 17h4l1 3H9l1-3z" /></>,
     plus: <path d="M12 5v14M5 12h14" />,
     logout: <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></>,
   }

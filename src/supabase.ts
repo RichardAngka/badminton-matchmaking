@@ -1,8 +1,11 @@
 import { createClient } from '@supabase/supabase-js'
-import type { AppState } from './types'
+import type { AppState, TournamentState } from './types'
 
 const url = import.meta.env.VITE_SUPABASE_URL as string
-const key = import.meta.env.VITE_SUPABASE_ANON_KEY as string
+// Supabase renamed the browser key: legacy `anon` (a JWT) -> `publishable`
+// (sb_publishable_...). Read both so local and Vercel work whichever is set.
+const key = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
+          ?? import.meta.env.VITE_SUPABASE_ANON_KEY) as string
 
 // ponytail: null when env vars absent — all callers check before use
 export const supabase = (url && key) ? createClient(url, key) : null
@@ -49,4 +52,28 @@ export async function listRemoteSessions(): Promise<SessionMeta[]> {
       (s: number, m: { shuttlesUsed?: number }) => s + (m.shuttlesUsed ?? 0), 0
     ),
   }))
+}
+
+// ── Internal tournament ──────────────────────────────────────────────────────
+// ponytail: one row, fixed id — single tournament, reshuffled in place
+export const TOURNAMENT_ID = 'internal-match'
+
+export async function fetchTournament(): Promise<TournamentState | null> {
+  if (!supabase) return null
+  const { data, error } = await supabase
+    .from('tournaments')
+    .select('state')
+    .eq('id', TOURNAMENT_ID)
+    .maybeSingle()
+  if (error) { console.error('[supabase] tournament fetch failed:', error.message); return null }
+  return (data?.state as TournamentState) ?? null
+}
+
+export async function upsertTournament(state: TournamentState): Promise<void> {
+  if (!supabase) return
+  const { error } = await supabase.from('tournaments').upsert(
+    { id: TOURNAMENT_ID, state, updated_at: new Date().toISOString() },
+    { onConflict: 'id' },
+  )
+  if (error) console.error('[supabase] tournament upsert failed:', error.message)
 }

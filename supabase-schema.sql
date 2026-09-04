@@ -27,3 +27,19 @@ CREATE POLICY "public update" ON sessions FOR UPDATE USING (true);
 -- Enable Realtime so postgres_changes events are sent to WebSocket subscribers
 ALTER PUBLICATION supabase_realtime ADD TABLE sessions;
 
+
+-- ── Internal tournament (/internal-match) ────────────────────────────────────
+-- Separate table from `sessions` on purpose: the roster must outlive the
+-- 14-day pg_cron sweep above, and a non-date key would break that job's
+-- session_date::date cast.
+CREATE TABLE IF NOT EXISTS tournaments (
+  id         TEXT         PRIMARY KEY,
+  state      JSONB        NOT NULL DEFAULT '{}',
+  updated_at TIMESTAMPTZ  DEFAULT NOW()
+);
+
+ALTER TABLE tournaments ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "public read"   ON tournaments FOR SELECT USING (true);
+CREATE POLICY "public insert" ON tournaments FOR INSERT WITH CHECK (true);
+CREATE POLICY "public update" ON tournaments FOR UPDATE USING (true);
