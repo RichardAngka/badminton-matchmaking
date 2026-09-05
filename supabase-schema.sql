@@ -43,3 +43,8 @@ ALTER TABLE tournaments ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "public read"   ON tournaments FOR SELECT USING (true);
 CREATE POLICY "public insert" ON tournaments FOR INSERT WITH CHECK (true);
 CREATE POLICY "public update" ON tournaments FOR UPDATE USING (true);
+
+-- Realtime for the roster, so an edit on /internal/player shows up on every
+-- other open device immediately instead of on the next 60s poll.
+-- Run this once in the SQL Editor; the table itself already exists.
+ALTER PUBLICATION supabase_realtime ADD TABLE tournaments;

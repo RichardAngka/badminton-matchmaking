@@ -1293,3 +1293,7 @@ body::before {
 .ip-in:focus { outline: none; border-color: var(--gold-dim); }
 .ip-jersey .ip-in { min-width: 130px; }
 .ip-name .ip-in { min-width: 120px; font-weight: 600; }
+.ip-act { width: 1%; text-align: right; }
+.ip-none { color: var(--dim); font-size: 12px; font-style: italic; }
+.ip-in-sm { min-width: 62px; max-width: 82px; }
+.im-add .ip-in-sm { flex: 0 0 auto; }

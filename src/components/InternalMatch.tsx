@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { Gender, TeamId, TourLevel, TourPlayer, TournamentState } from '../types'
 import {
-  LEVELS, LEVEL_CLASS, QUOTA, TEAM_IDS, TEAM_SIZE, countByLevel, loadTournament,
+  LEVELS, LEVEL_CLASS, QUOTA, TEAM_IDS, TEAM_SIZE, countByLevel, loadTournament, newPlayerId,
 } from '../internalMatch'
 import { upsertTournament } from '../supabase'
 import { useIsAdmin } from '../RoleContext'
@@ -67,8 +67,10 @@ export function InternalMatch() {
   const addPlayer = () => {
     const name = draft.name.trim()
     if (!name) return
-    const id = `${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${Date.now().toString(36)}`
-    patchPlayers(ps => [...ps, { id, name, level: draft.level, gender: draft.gender, team: null }])
+    patchPlayers(ps => [
+      ...ps,
+      { id: newPlayerId(name, ps), name, level: draft.level, gender: draft.gender, team: null },
+    ])
     setDraft({ name: '', level: draft.level, gender: 'M' })
   }
 

@@ -224,6 +224,16 @@ export function applyJersey(state: TournamentState): TournamentState {
   return changed ? { ...state, players } : state
 }
 
+/**
+ * A stable id for a new player: the slug of their name, suffixed only when
+ * that slug is already taken. Keeping the plain slug where possible is what
+ * lets JERSEY (and any future name-keyed data) find a re-added player.
+ */
+export function newPlayerId(name: string, players: TourPlayer[]): string {
+  const base = slug(name)
+  return players.some(p => p.id === base) ? `${base}-${Date.now().toString(36)}` : base
+}
+
 /** Numbers worn by more than one player — rendered with a warning on the page. */
 export function duplicateNumbers(players: TourPlayer[]): Set<number> {
   const seen = new Set<number>()
