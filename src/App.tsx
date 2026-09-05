@@ -12,8 +12,14 @@ import { LedgerPanel } from './components/LedgerPanel'
 import { PlayerPanel, TYPE_COLOR, teamType } from './components/PlayerPanel'
 import { CalendarPicker } from './components/CalendarPicker'
 import { InternalMatch } from './components/InternalMatch'
+import { InternalPlayers } from './components/InternalPlayers'
 import { matchCostByPlayer, playerTotal } from './ledgerMath'
 import { useIsAdmin } from './RoleContext'
+
+const INTERNAL_TABS: [string, string][] = [
+  ['/internal-match', 'Tim'],
+  ['/internal/player', 'Baju'],
+]
 
 const TODAY = new Date().toLocaleDateString('en-CA')  // YYYY-MM-DD, valid for date column
 
@@ -39,6 +45,7 @@ export function App() {
     '/history': 'riwayat',
     '/player': 'pemain',
     '/internal-match': 'internal',
+    '/internal/player': 'internal',
   }
   const TAB_ROUTE: Record<Tab, string> = {
     lapangan: '/',
@@ -599,7 +606,25 @@ export function App() {
             </div>
           )}
 
-          {mainTab === 'internal' && <InternalMatch />}
+          {mainTab === 'internal' && (
+            <>
+              {/* Two internal views under one nav item. The team builder keeps
+                  its original /internal-match URL so existing links survive. */}
+              <div className="im-segmented im-tabs" role="group" aria-label="Halaman internal">
+                {INTERNAL_TABS.map(([path, label]) => (
+                  <button
+                    key={path}
+                    className={`im-seg${pathname === path ? ' on' : ''}`}
+                    aria-pressed={pathname === path}
+                    onClick={() => navigate(path)}
+                  >
+                    <span className="im-tab-label">{label}</span>
+                  </button>
+                ))}
+              </div>
+              {pathname === '/internal/player' ? <InternalPlayers /> : <InternalMatch />}
+            </>
+          )}
 
           {mainTab === 'pemain' && (
             <PlayerPanel

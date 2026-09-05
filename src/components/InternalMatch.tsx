@@ -2,20 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { Gender, TeamId, TourLevel, TourPlayer, TournamentState } from '../types'
 import {
-  LEVELS, LEVEL_CLASS, QUOTA, TEAM_IDS, TEAM_SIZE, countByLevel, seedState,
+  LEVELS, LEVEL_CLASS, QUOTA, TEAM_IDS, TEAM_SIZE, countByLevel, loadTournament,
 } from '../internalMatch'
-import { fetchTournament, upsertTournament } from '../supabase'
+import { upsertTournament } from '../supabase'
 import { useIsAdmin } from '../RoleContext'
-
-// Seeds the row on first ever open. Concurrent first-loads write identical
-// content to the same id, so the race is harmless.
-async function loadTournament(): Promise<TournamentState> {
-  const remote = await fetchTournament()
-  if (remote?.players?.length) return remote
-  const seeded = seedState()
-  await upsertTournament(seeded)
-  return seeded
-}
 
 export function InternalMatch() {
   const isAdmin = useIsAdmin()

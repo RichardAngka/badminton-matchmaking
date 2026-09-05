@@ -1,4 +1,5 @@
-import type { Gender, TeamId, TourLevel, TournamentState, TourPlayer } from './types'
+import type { Gender, ShirtSize, TeamId, TourLevel, TournamentState, TourPlayer } from './types'
+import { fetchTournament, upsertTournament } from './supabase'
 
 export const TEAM_IDS: TeamId[] = [1, 2, 3, 4]
 
@@ -108,3 +109,169 @@ function selfCheck() {
 }
 
 if (import.meta.env.DEV) selfCheck()
+
+// ── Jersey / PB SOR number (/internal/player) ────────────────────────────────
+export const SIZES: ShirtSize[] = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL']
+
+// Two sources merged, keyed by TourPlayer.id (the slug of the roster name):
+//   1. the "List Baju Internal PB Sor 3rd Anniv" chat message — 56 shirt orders
+//   2. the club sheet's number registry — fills numbers the chat left blank
+// Both use nicknames, so the mapping to roster names is resolved once, here.
+// Non-obvious ones, and how they were established:
+//   Steven      = Super Lim     — registry and chat both put him at number 1
+//   Richard     = RA            — registry "66 Richard A"
+//   Ricky Ong   = RO            — registry 58, matching the chat's 58
+//   Acung       = Cung (84), Hendry = Hendry Mok (16), Nicholas = Nicholas Hans
+//   ynnaf-stefanny = Stefanny   — registry "59 Ong fann"
+//   Frederick   = Fred Kidal    — registry lists "Fredderick" (no number) as a
+//                                 person distinct from Fredik (55); GUESS
+//   Justine 35  = Justine W     — registry says only "Justine"; she is the one
+//                                 who ordered a shirt, Justine T did not; GUESS
+// The chat gave 21 to both Franky and Desfiner; the registry says 21 = Franky
+// and Desfiner = 0, so Desfiner has no number here. The one real collision left
+// is 7 (Jeffry Nemesis from the chat, Andy W from the registry) — deliberately
+// left in so the page can flag it, see duplicateNumbers().
+type Jersey = { number?: number; jersey?: string; size?: ShirtSize }
+
+export const JERSEY: Record<string, Jersey> = {
+  // 3rd Anniv shirt orders, in chat order
+  'super-lim':      { number: 1,   jersey: 'Bukan Super Lim', size: '2XL' },
+  'ra':             { number: 66,  jersey: '洪硕臨',           size: '2XL' },
+  'kewver':         { number: 47,  jersey: 'Kewver AK',       size: '2XL' },
+  'haudy':          {              jersey: 'Haudy K',         size: '3XL' },
+  'andrew':         { number: 68,  jersey: 'Huang JC',        size: '2XL' },
+  'franky':         { number: 21,  jersey: 'Franky',          size: 'S'   },
+  'stevi':          {              jersey: 'Andrean S',       size: 'S'   },
+  'felix-w':        { number: 41,  jersey: 'LIX',             size: 'L'   },
+  'martin-liu':     { number: 90,  jersey: 'MARTIN LIU',      size: '2XL' },
+  'cung':           { number: 84,  jersey: 'CUNGGORO',        size: 'XL'  },
+  'justine-w':      { number: 35,  jersey: 'JW',              size: 'L'   },
+  'henry-k':        { number: 73,  jersey: 'H.K',             size: 'XL'  },
+  'vicky':          { number: 67,  jersey: 'ViCC',            size: 'M'   },
+  'jeksen':         {              jersey: 'KEAN YEW',        size: '2XL' },
+  'fredik':         { number: 55,  jersey: 'Fred',            size: 'L'   },
+  'eric-c':         { number: 23,  jersey: 'Cantonius',       size: 'XL'  },
+  'martin-leo':     { number: 22,  jersey: 'Martin Leo',      size: 'L'   },
+  'alvin':          { number: 38,  jersey: '彭德森',           size: 'L'   },
+  'mavric':         { number: 83,  jersey: 'Tien',            size: 'XL'  },
+  'gilbert-thedy':  { number: 87,  jersey: 'Gilbert T',       size: 'XL'  },
+  'ro':             { number: 58,  jersey: 'ARROW',           size: 'XL'  },
+  'tetie':          { number: 111, jersey: 'TIE',             size: 'L'   },
+  'alvin-s':        {              jersey: 'ALVIN S W',       size: 'XL'  },
+  'ferry':          {              jersey: 'FERRY',           size: 'XL'  },
+  'dickson':        { number: 57,  jersey: 'D K',             size: 'XL'  },
+  'fred-w':         {              jersey: 'Drick',           size: 'L'   },
+  'martin-tanzil':  { number: 34,  jersey: 'Martin Tanzil',   size: 'L'   },
+  'ciyun':          {              jersey: 'C I Y U N',       size: 'L'   },
+  'jones':          {              jersey: 'NES',             size: 'XL'  },
+  'viggo':          { number: 48,  jersey: '伍',              size: 'L'   },
+  'winson':         { number: 50,  jersey: 'Winson C',        size: 'XL'  },
+  'nata':           { number: 18,  jersey: 'NATA',            size: 'XL'  },
+  'hendry-mok':     { number: 16,  jersey: 'HENDRY',          size: 'L'   },
+  'calvin-p':       {              jersey: 'CALVIN P',        size: '2XL' },
+  'josua':          {              jersey: 'JOZH',            size: '2XL' },
+  'harwin':         {              jersey: 'HARWIN',          size: 'XL'  },
+  'davin-k':        { number: 103, jersey: 'CHEN H W',        size: '3XL' },
+  'chiang-bacoet':  { number: 42,  jersey: 'CHIANG',          size: 'L'   },
+  'kewin':          { number: 77,  jersey: 'WINNN',           size: '3XL' },
+  'sherly':         { number: 33,  jersey: 'ESWE',            size: 'S'   },
+  'ricky-h':        { number: 31,  jersey: 'Ricky H',         size: 'L'   },
+  'felix-ig':       {              jersey: 'LIX',             size: 'L'   },
+  'jeffry-nemesis': { number: 7,   jersey: 'JEP',             size: 'L'   },
+  'vidya':          { number: 6,   jersey: 'V A',             size: 'L'   },
+  'desfiner':       {              jersey: 'DES',             size: 'M'   },
+  'wesley':         { number: 105, jersey: 'wesly',           size: 'L'   },
+  'darren':         {              jersey: 'Darren T',        size: 'XL'  },
+  'fred-kidal':     {              jersey: 'Frederick',       size: 'L'   },
+  'nicholas-hans':  { number: 82,  jersey: '黄星銘',           size: 'L'   },
+  'stefanny':       { number: 59,  jersey: 'stefanny',        size: 'M'   },
+  'rendy':          {                                         size: 'M'   },
+  'kristanto':      {              jersey: 'kristanto',       size: 'L'   },
+  'juan':           { number: 14,  jersey: '丘運來',           size: 'L'   },
+  'alex':           { number: 86,  jersey: 'Alex YG',         size: '3XL' },
+  'paul':           {              jersey: '翁明克',           size: 'L'   },
+  'alpen':          {                                         size: 'XL'  },
+
+  // Registry only — has a PB SOR number, did not order a 3rd Anniv shirt
+  'jericko':        { number: 81 },
+  'david-cai':      { number: 45 },
+  'marvinzimka':    { number: 8  },
+  'andy-w':         { number: 7  },
+  'calvine':        { number: 9  },
+  'arvin':          { number: 2  },
+  'doni':           { number: 88 },
+}
+
+/**
+ * Fills blank jersey fields from JERSEY. Only ever writes into `undefined`, so
+ * an admin edit always wins and re-running is a no-op. Returns `state` itself
+ * when nothing changed, which is what tells the caller to skip the DB write.
+ */
+export function applyJersey(state: TournamentState): TournamentState {
+  let changed = false
+  const players = state.players.map(p => {
+    const j = JERSEY[p.id]
+    if (!j) return p
+    const next = { ...p }
+    let hit = false
+    if (next.number === undefined && j.number !== undefined) { next.number = j.number; hit = true }
+    if (next.jersey === undefined && j.jersey !== undefined) { next.jersey = j.jersey; hit = true }
+    if (next.size   === undefined && j.size   !== undefined) { next.size   = j.size;   hit = true }
+    if (!hit) return p
+    changed = true
+    return next
+  })
+  return changed ? { ...state, players } : state
+}
+
+/** Numbers worn by more than one player — rendered with a warning on the page. */
+export function duplicateNumbers(players: TourPlayer[]): Set<number> {
+  const seen = new Set<number>()
+  const dup = new Set<number>()
+  for (const p of players) {
+    if (p.number === undefined) continue
+    if (seen.has(p.number)) dup.add(p.number)
+    seen.add(p.number)
+  }
+  return dup
+}
+
+/**
+ * Seeds the row on first ever open, then backfills jersey data into rows saved
+ * before those fields existed. Concurrent first-loads write identical content
+ * to the same id, so the race is harmless.
+ */
+export async function loadTournament(): Promise<TournamentState> {
+  const remote = await fetchTournament()
+  const next = applyJersey(remote?.players?.length ? remote : seedState())
+  if (next !== remote) await upsertTournament(next)
+  return next
+}
+
+// ponytail: dev-only self-check instead of a test runner this project doesn't
+// have. Fails loudly on `yarn dev` if a JERSEY key stops matching a roster id
+// (a renamed player) or if applyJersey starts clobbering edits.
+if (import.meta.env.DEV) {
+  const ids = new Set(seedState().players.map(p => p.id))
+  const orphans = Object.keys(JERSEY).filter(id => !ids.has(id))
+  console.assert(orphans.length === 0, '[jersey] keys match no roster player:', orphans)
+
+  const once = applyJersey(seedState())
+  console.assert(applyJersey(once) === once, '[jersey] applyJersey is not idempotent')
+  console.assert(
+    once.players.find(p => p.id === 'super-lim')?.number === 1,
+    '[jersey] backfill did not run',
+  )
+
+  const edited = { ...once, players: once.players.map(p =>
+    p.id === 'super-lim' ? { ...p, number: 99 } : p) }
+  console.assert(
+    applyJersey(edited).players.find(p => p.id === 'super-lim')?.number === 99,
+    '[jersey] backfill clobbered an existing edit',
+  )
+  console.assert(
+    [...duplicateNumbers(once.players)].join() === '7',
+    '[jersey] expected exactly one duplicate number (7):',
+    [...duplicateNumbers(once.players)],
+  )
+}
