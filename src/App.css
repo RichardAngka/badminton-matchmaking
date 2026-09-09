@@ -1083,6 +1083,7 @@ body::before {
 .lvl-b2  { background: var(--sb2bg); color: var(--sb2); border: 1px solid rgba(244,114,182,.3); }
 .lvl-wb1 { background: #1B0E24; color: #C084FC; border: 1px solid rgba(192,132,252,.3); }
 .lvl-wb2 { background: #22101B; color: #F9A8D4; border: 1px solid rgba(249,168,212,.3); }
+.lvl-luar{ background: #1A1A1A; color: #A1A1AA; border: 1px solid rgba(161,161,170,.3); }
 
 .im-pool-bar {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;

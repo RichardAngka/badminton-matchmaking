@@ -69,6 +69,9 @@ export interface TourPlayer {
   number?: number   // PB SOR squad number, unpadded: "07" and 7 are one number
   jersey?: string   // name printed on the back
   size?: ShirtSize
+  // Jersey-only, not in the tournament: excluded from the level pool and the
+  // team builder, listed in its own group on /internal/player.
+  external?: true
 }
 
 export interface TournamentState {

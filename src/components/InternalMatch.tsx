@@ -83,16 +83,17 @@ export function InternalMatch() {
     save({ ...state, teamNames: { ...state.teamNames, [t]: name } })
 
   // ── readouts ──────────────────────────────────────────────────────────────
-  const pool = countByLevel(state.players)
+  const roster = state.players.filter(p => !p.external)
+  const pool = countByLevel(roster)
   const poolOk = LEVELS.every(l => pool[l] === QUOTA[l] * 4)
 
   const byTeam = Object.fromEntries(TEAM_IDS.map(t => {
-    const members = state.players.filter(p => p.team === t)
+    const members = roster.filter(p => p.team === t)
     const have = countByLevel(members)
     return [t, { members, have, full: LEVELS.every(l => have[l] === QUOTA[l]) }]
   })) as Record<TeamId, { members: TourPlayer[]; have: Record<TourLevel, number>; full: boolean }>
 
-  const unassigned = state.players.filter(p => p.team === null)
+  const unassigned = roster.filter(p => p.team === null)
   const q = search.trim().toLowerCase()
   const visible = unassigned.filter(p =>
     (!levelFilter || p.level === levelFilter) && (!q || p.name.toLowerCase().includes(q)))
@@ -115,7 +116,7 @@ export function InternalMatch() {
               </span>
             )
           })}
-          <span className="im-pool-total">{state.players.length} orang</span>
+          <span className="im-pool-total">{roster.length} orang</span>
         </div>
       </section>
 

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import * as XLSX from 'xlsx'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { Gender, ShirtSize, TourLevel, TourPlayer, TournamentState } from '../types'
 import {
@@ -11,6 +12,33 @@ import { useIsAdmin } from '../RoleContext'
 function parseNumber(v: string): number | undefined {
   const n = Number(v.trim())
   return v.trim() && Number.isInteger(n) && n >= 0 && n < 1000 ? n : undefined
+}
+
+function exportXLSX(players: TourPlayer[]) {
+  const rows = groupRoster(players).flatMap(g =>
+    g.rows.map((p, i) => [
+      i + 1, p.name, p.number ?? '', p.jersey ?? '', p.size ?? '',
+      g.label, p.gender === 'F' ? 'Putri' : 'Putra',
+    ]),
+  )
+  const sheet = [['No', 'Nama', 'No. PB', 'Nama Baju', 'Size', 'Grade', 'Gender'], ...rows]
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sheet), 'Baju Internal')
+  XLSX.writeFile(wb, `pbsor-baju-internal-${new Date().toISOString().slice(0, 10)}.xlsx`)
+}
+
+/** Level groups in table order, with jersey-only players in a trailing group. */
+function groupRoster(players: TourPlayer[]) {
+  const byName = (a: TourPlayer, b: TourPlayer) => a.name.localeCompare(b.name)
+  const groups = LEVELS.map(l => ({
+    key: l as string,
+    label: l as string,
+    cls: LEVEL_CLASS[l],
+    rows: players.filter(p => !p.external && p.level === l).sort(byName),
+  }))
+  const ext = players.filter(p => p.external).sort(byName)
+  if (ext.length) groups.push({ key: 'LUAR', label: 'Luar Internal', cls: 'lvl-luar', rows: ext })
+  return groups
 }
 
 const EMPTY_DRAFT = {
@@ -123,6 +151,9 @@ export function InternalPlayers() {
           <button className="btn btn-ghost btn-sm" onClick={() => setAdding(a => !a)}>
             {adding ? 'Tutup' : '+ Pemain'}
           </button>
+          <button className="btn btn-ghost btn-sm" onClick={() => exportXLSX(state.players)}>
+            Export Excel
+          </button>
           <span className="im-pool-total">{state.players.length} orang</span>
         </div>
       )}
@@ -176,15 +207,12 @@ export function InternalPlayers() {
             </tr>
           </thead>
 
-          {LEVELS.map(level => {
-            const rows = state.players
-              .filter(p => p.level === level)
-              .sort((a, b) => a.name.localeCompare(b.name))
+          {groupRoster(state.players).map(({ key, label, cls, rows }) => {
             return (
-              <tbody key={level}>
+              <tbody key={key}>
                 <tr className="ip-grouphead">
                   <th colSpan={cols}>
-                    <span className={`lvl-badge ${LEVEL_CLASS[level]}`}>{level}</span>
+                    <span className={`lvl-badge ${cls}`}>{label}</span>
                     <span className="ip-count">{rows.length} orang</span>
                   </th>
                 </tr>
