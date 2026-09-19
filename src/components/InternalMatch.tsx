@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import * as XLSX from 'xlsx'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { Gender, TeamId, TourLevel, TourPlayer, TournamentState } from '../types'
 import {
@@ -6,6 +7,101 @@ import {
 } from '../internalMatch'
 import { upsertTournament } from '../supabase'
 import { useIsAdmin } from '../RoleContext'
+
+/** Assigned players only, team by team, level by level, in on-screen order. */
+function teamGroups(state: TournamentState) {
+  return TEAM_IDS.map(t => {
+    const members = state.players.filter(p => !p.external && p.team === t)
+    return {
+      name: state.teamNames[t],
+      count: members.length,
+      levels: LEVELS
+        .map(level => ({ level, players: members.filter(p => p.level === level) }))
+        .filter(g => g.players.length),
+    }
+  })
+}
+
+const stamp = () => new Date().toLocaleDateString('en-CA')  // YYYY-MM-DD, local
+
+function exportXLSX(state: TournamentState) {
+  const rows = teamGroups(state).flatMap(t =>
+    t.levels.flatMap(g => g.players).map((p, i) => [
+      t.name, i + 1, p.name, p.level, p.gender === 'F' ? 'Putri' : 'Putra', p.captain ? 'Kapten' : '',
+    ]))
+  const sheet = [['Tim', 'No', 'Nama', 'Level', 'Gender', 'Kapten'], ...rows]
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sheet), 'Tim Internal')
+  XLSX.writeFile(wb, `pbsor-tim-internal-${stamp()}.xlsx`)
+}
+
+// Mirrors the .lvl-* badge colours in App.css — canvas can't read CSS classes.
+const LEVEL_COLOR: Record<TourLevel, string> = {
+  'A1+': '#FFB020', A1: '#FFCD5C', A2: '#60A5FA', B1: '#00C876',
+  B2: '#F472B6', 'W-B1': '#C084FC', 'W-B2': '#F9A8D4',
+}
+
+/** The four rosters side by side as one image, for the group chat. */
+async function exportPNG(state: TournamentState) {
+  await document.fonts.ready  // Inter must be loaded or the canvas falls back
+  const teams = teamGroups(state)
+  const COL = 250, GAP = 14, PAD = 24, TITLE = 56, HEAD = 40, LVL = 26, ROW = 26
+  // Tallest column, computed from the same groups the loop below draws.
+  const body = Math.max(...teams.map(t =>
+    t.levels.reduce((h, g) => h + LVL + g.players.length * ROW, 0)))
+  const W = PAD * 2 + COL * 4 + GAP * 3
+  const H = TITLE + HEAD + 10 + body + PAD * 2
+  const SCALE = 2  // retina-sharp when zoomed on a phone
+
+  const canvas = document.createElement('canvas')
+  canvas.width = W * SCALE
+  canvas.height = H * SCALE
+  const g = canvas.getContext('2d')!
+  g.scale(SCALE, SCALE)
+  g.textBaseline = 'middle'
+  g.fillStyle = '#0e0e0e'
+  g.fillRect(0, 0, W, H)
+
+  g.fillStyle = '#e5e2e1'
+  g.font = '800 22px Inter, sans-serif'
+  g.fillText('Internal Match · Tim', PAD, PAD + 14)
+
+  teams.forEach((t, i) => {
+    const x = PAD + i * (COL + GAP)
+    let y = TITLE
+    g.fillStyle = '#131313'
+    g.fillRect(x, y, COL, H - y - PAD)
+    g.fillStyle = '#adc7ff'
+    g.fillRect(x, y, COL, HEAD)
+    g.fillStyle = '#0A0800'
+    g.font = '800 16px Inter, sans-serif'
+    g.fillText(t.name, x + 12, y + HEAD / 2, COL - 70)
+    g.textAlign = 'right'
+    g.font = '700 12px "JetBrains Mono", monospace'
+    g.fillText(`${t.count}/${TEAM_SIZE}`, x + COL - 12, y + HEAD / 2)
+    g.textAlign = 'left'
+    y += HEAD + 10
+
+    for (const { level, players } of t.levels) {
+      g.fillStyle = LEVEL_COLOR[level]
+      g.font = '800 11px Inter, sans-serif'
+      g.fillText(level, x + 12, y + LVL / 2)
+      y += LVL
+      g.fillStyle = '#e5e2e1'
+      g.font = '600 14px Inter, sans-serif'
+      for (const p of players) {
+        // maxWidth squeezes an overlong name instead of spilling into the next column
+        g.fillText(p.captain ? `${p.name} (C)` : p.name, x + 20, y + ROW / 2, COL - 32)
+        y += ROW
+      }
+    }
+  })
+
+  const a = document.createElement('a')
+  a.href = canvas.toDataURL('image/png')
+  a.download = `pbsor-tim-internal-${stamp()}.png`
+  a.click()
+}
 
 export function InternalMatch() {
   const isAdmin = useIsAdmin()
@@ -234,6 +330,15 @@ export function InternalMatch() {
             </span>
           </div>
         </div>
+
+        {isAdmin && (
+          <div className="im-controls">
+            <button className="btn btn-ghost btn-sm" disabled={roster.every(p => p.team === null)}
+              onClick={() => exportXLSX(state)}>Export Excel</button>
+            <button className="btn btn-ghost btn-sm" disabled={roster.every(p => p.team === null)}
+              onClick={() => exportPNG(state)}>Export PNG</button>
+          </div>
+        )}
 
         {/* Tabs reuse the filter's segmented track, full-width. The badge
             carries each team's fill so a short team is still visible from the
