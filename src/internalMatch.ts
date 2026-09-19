@@ -1,4 +1,6 @@
-import type { Gender, ShirtSize, TeamId, TourLevel, TournamentState, TourPlayer } from './types'
+import type {
+  Bracket, BracketKey, Gender, Score, ShirtSize, TeamId, TourLevel, TournamentState, TourPlayer,
+} from './types'
 import { fetchTournament, upsertTournament } from './supabase'
 
 export const TEAM_IDS: TeamId[] = [1, 2, 3, 4]
@@ -284,4 +286,95 @@ if (import.meta.env.DEV) {
     '[jersey] expected exactly one duplicate number (7):',
     [...duplicateNumbers(once.players)],
   )
+}
+
+// ── Bracket (/internal/tournament) ───────────────────────────────────────────
+export const EMPTY_BRACKET: Bracket = { draw: 4, partai: {}, tiebreak: {} }
+
+type Pair = [TeamId | undefined, TeamId | undefined]
+const HALF = PARTAI.length / 2  // 5
+
+/** Team 1 vs `draw` in SF 1; the remaining two teams in SF 2. */
+export function semis(draw: Bracket['draw']): [[TeamId, TeamId], [TeamId, TeamId]] {
+  const [c, d] = TEAM_IDS.filter(t => t !== 1 && t !== draw)
+  return [[1, draw], [c, d]]
+}
+
+/**
+ * More than half of the 10 partai wins outright, so 6 decides it even before
+ * all 10 are played. 5–5 goes to the extra match.
+ */
+export function matchWinner([a, b]: Pair, s?: Score, tiebreak?: TeamId): TeamId | undefined {
+  if (!a || !b || !s) return undefined
+  if (s[0] > HALF) return a
+  if (s[1] > HALF) return b
+  if (s[0] === HALF && s[1] === HALF && (tiebreak === a || tiebreak === b)) return tiebreak
+  return undefined
+}
+
+/**
+ * Every lineup and winner, derived from the draw and the entered results:
+ * semifinal winners meet in the final, losers in the third-place match.
+ * `podium` is [champion, runner-up, 2nd runner-up].
+ */
+export function resolve(b: Bracket) {
+  const [sf1, sf2] = semis(b.draw)
+  const win = (k: BracketKey, pair: Pair) => matchWinner(pair, b.partai[k], b.tiebreak[k])
+  const lose = (pair: Pair, w?: TeamId) => w && pair.find(t => t !== w)
+  const w1 = win('sf1', sf1)
+  const w2 = win('sf2', sf2)
+  const final: Pair = [w1, w2]
+  const third: Pair = [lose(sf1, w1), lose(sf2, w2)]
+  const pairs: Record<BracketKey, Pair> = { sf1, sf2, final, third }
+  const winner: Record<BracketKey, TeamId | undefined> =
+    { sf1: w1, sf2: w2, final: win('final', final), third: win('third', third) }
+  const podium = [winner.final, lose(final, winner.final), winner.third]
+  return { pairs, winner, podium }
+}
+
+/**
+ * Sets one match's result. A new score arrives with no extra-match winner (it
+ * only counts at 5–5), and if the edit changes who plays the final or the
+ * third-place match, that match's result is dropped rather than left pointing
+ * at the wrong teams.
+ */
+export function editMatch(b: Bracket, k: BracketKey, partai?: Score, tiebreak?: TeamId): Bracket {
+  const next: Bracket = {
+    ...b,
+    partai: { ...b.partai, [k]: partai },
+    tiebreak: { ...b.tiebreak, [k]: tiebreak },
+  }
+  const [was, now] = [resolve(b).pairs, resolve(next).pairs]
+  for (const d of ['final', 'third'] as const) {
+    if (was[d][0] !== now[d][0] || was[d][1] !== now[d][1]) {
+      next.partai[d] = undefined
+      next.tiebreak[d] = undefined
+    }
+  }
+  return next
+}
+
+if (import.meta.env.DEV) {
+  console.assert(semis(3).flat().sort().join() === '1,2,3,4', '[bracket] semis drop or repeat a team')
+  console.assert(matchWinner([1, 2], [6, 4]) === 1, '[bracket] 6–4 should win')
+  console.assert(matchWinner([1, 2], [6, 0]) === 1, '[bracket] 6 partai clinches early')
+  console.assert(matchWinner([1, 2], [5, 4]) === undefined, '[bracket] 5–4 is not decided')
+  console.assert(matchWinner([1, 2], [5, 5]) === undefined, '[bracket] 5–5 needs the extra match')
+  console.assert(matchWinner([1, 2], [5, 5], 2) === 2, '[bracket] extra match decides 5–5')
+  console.assert(matchWinner([1, 2], [6, 4], 2) === 1, '[bracket] stale extra match overrode 6–4')
+
+  // draw 4: SF 1 = 1 v 4, SF 2 = 2 v 3
+  let b = editMatch(EMPTY_BRACKET, 'sf1', [6, 4])
+  b = editMatch(b, 'sf2', [5, 5], 3)
+  b = editMatch(b, 'final', [4, 6])
+  b = editMatch(b, 'third', [6, 4])
+  const r = resolve(b)
+  console.assert(r.pairs.final.join() === '1,3', '[bracket] wrong finalists', r)
+  console.assert(r.pairs.third.join() === '4,2', '[bracket] third place is not the SF losers', r)
+  console.assert(r.podium.join() === '3,1,4', '[bracket] wrong podium', r)
+  console.assert(resolve(editMatch(b, 'sf1', [7, 3])).podium.join() === '3,1,4',
+    '[bracket] same SF winner should keep later results')
+  const flipped = editMatch(b, 'sf1', [4, 6])
+  console.assert(flipped.partai.final === undefined && flipped.partai.third === undefined,
+    '[bracket] new lineup kept a stale final / third-place result')
 }

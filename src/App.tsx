@@ -13,12 +13,14 @@ import { PlayerPanel, TYPE_COLOR, teamType } from './components/PlayerPanel'
 import { CalendarPicker } from './components/CalendarPicker'
 import { InternalMatch } from './components/InternalMatch'
 import { InternalPlayers } from './components/InternalPlayers'
+import { InternalBracket } from './components/InternalBracket'
 import { matchCostByPlayer, playerTotal } from './ledgerMath'
 import { useIsAdmin } from './RoleContext'
 
 const INTERNAL_TABS: [string, string][] = [
   ['/internal-match', 'Tim'],
   ['/internal/player', 'Baju'],
+  ['/internal/tournament', 'Bagan'],
 ]
 
 const TODAY = new Date().toLocaleDateString('en-CA')  // YYYY-MM-DD, valid for date column
@@ -46,6 +48,7 @@ export function App() {
     '/player': 'pemain',
     '/internal-match': 'internal',
     '/internal/player': 'internal',
+    '/internal/tournament': 'internal',
   }
   const TAB_ROUTE: Record<Tab, string> = {
     lapangan: '/',
@@ -626,7 +629,9 @@ export function App() {
                   </button>
                 ))}
               </div>
-              {pathname === '/internal/player' ? <InternalPlayers /> : <InternalMatch />}
+              {pathname === '/internal/player' ? <InternalPlayers />
+                : pathname === '/internal/tournament' ? <InternalBracket />
+                : <InternalMatch />}
             </>
           )}
 

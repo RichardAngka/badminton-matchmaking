@@ -1304,3 +1304,84 @@ body::before {
 .ip-none { color: var(--dim); font-size: 12px; font-style: italic; }
 .ip-in-sm { min-width: 62px; max-width: 82px; }
 .im-add .ip-in-sm { flex: 0 0 auto; }
+
+/* ── Bagan (/internal/tournament) ────────────────────────────────────────── */
+.br {
+  display: grid; grid-template-columns: 1fr 1fr; align-items: center;
+  column-gap: 28px; row-gap: 16px; margin-bottom: 16px;
+}
+/* Semifinal losers — under the final, same round, no connector. */
+.br-third { grid-column: 2; }
+/* Equal rows so both semis share a centre line the connectors can meet at. */
+.br-semis { display: grid; grid-auto-rows: 1fr; row-gap: 20px; }
+.br-slot, .br-final { position: relative; }
+/* Connectors: each semi draws half of the ] out to the middle of the row gap,
+   the final draws the stub into it. 14px + 14px = column-gap. */
+.br-slot::after {
+  content: ''; position: absolute; right: -14px; width: 14px;
+  border-right: 2px solid var(--border-s);
+}
+.br-slot:first-child::after { top: 50%; bottom: -10px; border-top: 2px solid var(--border-s); }
+.br-slot:last-child::after  { top: -10px; bottom: 50%; border-bottom: 2px solid var(--border-s); }
+.br-final::before {
+  content: ''; position: absolute; left: -14px; width: 14px; top: 50%;
+  border-top: 2px solid var(--border-s);
+}
+
+.br-match {
+  display: flex; flex-direction: column; gap: 4px; height: 100%;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 8px;
+}
+.br-label, .br-place-label {
+  font-size: 10.5px; font-weight: 700; color: var(--dim);
+  text-transform: uppercase; letter-spacing: .05em;
+}
+.br-label { margin-bottom: 2px; }
+.br-team {
+  display: flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 4px 0 9px;
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-xs);
+  color: var(--text); font-size: 13px; font-weight: 600;
+}
+.br-team.win  { background: var(--gold-bg); border-color: var(--gold-dim); color: var(--gold); }
+.br-team.lose { color: var(--dim); }
+.br-team.tbd {
+  background: none; border-style: dashed; color: var(--dim);
+  font-size: 12px; font-weight: 500; font-style: italic;
+}
+.br-team-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.br-check { flex-shrink: 0; font-weight: 800; }
+.br-partai {
+  flex-shrink: 0; width: 44px; min-height: 32px; padding: 0 4px; text-align: center;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-xs);
+  color: inherit; font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 700;
+}
+.br-partai:focus-visible { outline: 2px solid var(--gold-dim); outline-offset: 1px; }
+.br-partai.static { display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; background: none; border-color: transparent; }
+
+/* Extra match at 5–5 */
+.br-tb { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
+.br-tb-row { display: flex; gap: 4px; }
+.br-tb-btn {
+  flex: 1 1 0; min-width: 0; min-height: 34px; padding: 0 6px;
+  background: var(--card-lo); border: 1px dashed var(--border-s); border-radius: var(--radius-xs);
+  color: var(--muted); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.br-tb-btn:hover:not(.on) { border-color: var(--dim); color: var(--text); }
+.br-tb-btn:focus-visible { outline: 2px solid var(--gold-dim); outline-offset: 1px; }
+.br-tb-btn.on { background: var(--gold-bg); border: 1px solid var(--gold-dim); color: var(--gold); }
+.br-tb-note { font-size: 12.5px; font-weight: 600; color: var(--muted); }
+
+.br-podium { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.br-place {
+  display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 10px 12px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
+}
+.br-place.gold { background: var(--gold-bg); border-color: var(--gold-dim); }
+.br-place.gold .br-place-label { color: var(--gold); }
+.br-place-name {
+  font-size: 16px; font-weight: 800; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}

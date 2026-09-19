@@ -76,7 +76,20 @@ export interface TourPlayer {
   captain?: true
 }
 
+// ── Bracket (/internal/tournament) ───────────────────────────────────────────
+// Only the draw and results are stored; every winner, the final and third-place
+// lineups and the podium are derived from them, so they can't disagree.
+export type BracketKey = 'sf1' | 'sf2' | 'final' | 'third'  // third = semifinal losers
+export type Score = [number, number]  // partai won out of 10, in the pair's order
+
+export interface Bracket {
+  draw: 2 | 3 | 4   // Team 1's semifinal opponent; the other two meet in SF 2
+  partai: Partial<Record<BracketKey, Score>>
+  tiebreak: Partial<Record<BracketKey, TeamId>>  // extra-match winner, only read at 5–5
+}
+
 export interface TournamentState {
   teamNames: Record<TeamId, string>
   players: TourPlayer[]
+  bracket?: Bracket  // optional: rows saved before the bracket page existed
 }
