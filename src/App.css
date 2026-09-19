@@ -1166,6 +1166,10 @@ body::before {
   font-size: 9px; font-weight: 800; padding: 1px 4px; border-radius: 3px; flex-shrink: 0;
   background: rgba(249,168,212,.14); color: #F9A8D4;
 }
+.im-cap {
+  font-size: 9px; font-weight: 800; padding: 1px 4px; border-radius: 3px; flex-shrink: 0;
+  background: var(--gold); color: #0A0800;
+}
 
 .im-teamstrip { display: flex; gap: 3px; flex-shrink: 0; }
 .im-tbtn {

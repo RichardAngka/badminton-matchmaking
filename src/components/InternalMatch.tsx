@@ -53,7 +53,13 @@ export function InternalMatch() {
     save({ ...state, players: fn(state.players) })
 
   const setTeam = (id: string, team: TeamId | null) =>
-    patchPlayers(ps => ps.map(p => (p.id === id ? { ...p, team } : p)))
+    patchPlayers(ps => ps.map(p =>
+      (p.id === id && p.team !== team ? { ...p, team, captain: undefined } : p)))
+
+  // Toggle p as captain; anyone else on the team loses the armband.
+  const toggleCaptain = (p: TourPlayer) =>
+    patchPlayers(ps => ps.map(x => x.team !== p.team ? x
+      : { ...x, captain: x.id === p.id && !p.captain ? true : undefined }))
 
   const editPlayer = (id: string, patch: Partial<TourPlayer>) =>
     patchPlayers(ps => ps.map(p => (p.id === id ? { ...p, ...patch } : p)))
@@ -76,7 +82,7 @@ export function InternalMatch() {
 
   const clearTeams = () => {
     if (!confirm('Kosongkan semua tim? Semua 80 pemain kembali ke pool.')) return
-    patchPlayers(ps => ps.map(p => ({ ...p, team: null })))
+    patchPlayers(ps => ps.map(p => ({ ...p, team: null, captain: undefined })))
   }
 
   const renameTeam = (t: TeamId, name: string) =>
@@ -100,6 +106,9 @@ export function InternalMatch() {
 
   return (
     <>
+      {/* Pool integrity and the pool itself are the admin's workbench —
+          viewers only see the finished teams. */}
+      {isAdmin && <>
       {/* Pool integrity — the roster has zero slack, so a bad level edit or a
           no-show has to surface immediately, not at the fourth team. */}
       <section className="ws-section">
@@ -213,6 +222,7 @@ export function InternalMatch() {
               </div>
             ))}
       </section>
+      </>}
 
       {/* ── Teams ── */}
       <section className="ws-section">
@@ -289,6 +299,7 @@ export function InternalMatch() {
                                 onPatch={patch => editPlayer(p.id, patch)}
                                 onRemove={() => removePlayer(p)}
                                 onTeam={tt => setTeam(p.id, tt)}
+                                onCaptain={() => toggleCaptain(p)}
                               />
                             ))}
                       </div>
@@ -304,7 +315,7 @@ export function InternalMatch() {
   )
 }
 
-function PlayerRow({ p, isAdmin, editing, onEdit, onPatch, onRemove, onTeam }: {
+function PlayerRow({ p, isAdmin, editing, onEdit, onPatch, onRemove, onTeam, onCaptain }: {
   p: TourPlayer
   isAdmin: boolean
   editing: boolean
@@ -312,6 +323,7 @@ function PlayerRow({ p, isAdmin, editing, onEdit, onPatch, onRemove, onTeam }: {
   onPatch: (patch: Partial<TourPlayer>) => void
   onRemove: () => void
   onTeam: (t: TeamId | null) => void
+  onCaptain?: () => void   // team panel only — the pool has no team to captain
 }) {
   return (
     <div className="im-row">
@@ -335,10 +347,16 @@ function PlayerRow({ p, isAdmin, editing, onEdit, onPatch, onRemove, onTeam }: {
       ) : (
         <>
           <span className="im-row-name">{p.name}</span>
+          {p.captain && <span className="im-cap" title="Kapten">C</span>}
           {p.gender === 'F' && <span className="im-w">W</span>}
           <span className={`lvl-badge ${LEVEL_CLASS[p.level]}`}>{p.level}</span>
           {isAdmin && (
             <>
+              {onCaptain && (
+                <button className={`im-tbtn${p.captain ? ' on' : ''}`} onClick={onCaptain}
+                  title={p.captain ? 'Batal kapten' : 'Jadikan kapten'}
+                  aria-pressed={!!p.captain}>C</button>
+              )}
               <div className="im-teamstrip">
                 {TEAM_IDS.map(t => (
                   <button key={t}

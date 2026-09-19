@@ -72,6 +72,8 @@ export interface TourPlayer {
   // Jersey-only, not in the tournament: excluded from the level pool and the
   // team builder, listed in its own group on /internal/player.
   external?: true
+  // At most one per team. Dropped whenever the player changes team.
+  captain?: true
 }
 
 export interface TournamentState {
