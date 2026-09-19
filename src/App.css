@@ -920,7 +920,9 @@ body::before {
   }
   .sidebar-brand { display: none; }
   .sidebar-nav { flex-direction: row; flex: 1; gap: 2px; }
-  .sidebar-foot { flex-direction: row; padding-top: 0; border-top: none; border-left: 1px solid var(--border); padding-left: 4px; }
+  /* Bottom nav is full with tabs — login/logout moves to the topbar */
+  .sidebar-foot { display: none; }
+  .sidebar-foot-mobile { display: inline-flex; }
   .nav-item { flex-direction: column; gap: 3px; padding: 7px 6px; font-size: 10px; font-weight: 700; }
   .nav-item svg { width: 21px; height: 21px; }
   .nav-item span { font-size: 9.5px; letter-spacing: .02em; }

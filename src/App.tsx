@@ -362,6 +362,10 @@ export function App() {
             </div>
             <button className="icon-btn" onClick={() => setLedgerOpen(true)} title="Live Ledger"><Icon name="wallet" /></button>
             {isAdmin && <button className="icon-btn" onClick={() => setConfigOpen(true)} title="Konfigurasi"><Icon name="gear" /></button>}
+            <button className="icon-btn sidebar-foot-mobile" title={isAdmin ? 'Keluar' : 'Login Admin'}
+              onClick={() => isAdmin ? supabase?.auth.signOut() : window.dispatchEvent(new Event('open-admin-login'))}>
+              <Icon name="logout" />
+            </button>
             <button className="btn btn-primary new-match-btn" onClick={() => setQueueOpen(true)} disabled={!isAdmin}>
               <Icon name="plus" /> New Match
             </button>
