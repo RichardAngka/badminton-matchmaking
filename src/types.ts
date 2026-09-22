@@ -74,6 +74,8 @@ export interface TourPlayer {
   external?: true
   // At most one per team. Dropped whenever the player changes team.
   captain?: true
+  // Days checked in on /internal/absen. Kept across team changes — they still arrived.
+  present?: Day[]
 }
 
 // ── Bracket (/internal/tournament) ───────────────────────────────────────────
@@ -88,8 +90,17 @@ export interface Bracket {
   tiebreak: Partial<Record<BracketKey, TeamId>>  // extra-match winner, only read at 5–5
 }
 
+// ── Line-up (/internal/lineup) ───────────────────────────────────────────────
+// Slot i plays PARTAI[i >> 1] in position i & 1: a player id, 'WO' for a
+// forfeited slot, or null while not entered. Stored per team per day, not per
+// match — every team plays once a day, so a lineup follows its team if the
+// draw or a semifinal result changes.
+export type Day = 1 | 2
+export type Slot = string | null
+
 export interface TournamentState {
   teamNames: Record<TeamId, string>
   players: TourPlayer[]
   bracket?: Bracket  // optional: rows saved before the bracket page existed
+  lineups?: Partial<Record<TeamId, Partial<Record<Day, Slot[]>>>>
 }

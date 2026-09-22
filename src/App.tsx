@@ -14,6 +14,8 @@ import { CalendarPicker } from './components/CalendarPicker'
 import { InternalMatch } from './components/InternalMatch'
 import { InternalPlayers } from './components/InternalPlayers'
 import { InternalBracket } from './components/InternalBracket'
+import { InternalLineup } from './components/InternalLineup'
+import { InternalAbsen } from './components/InternalAbsen'
 import { matchCostByPlayer, playerTotal } from './ledgerMath'
 import { useIsAdmin } from './RoleContext'
 
@@ -21,6 +23,8 @@ const INTERNAL_TABS: [string, string][] = [
   ['/internal-match', 'Tim'],
   ['/internal/player', 'Baju'],
   ['/internal/tournament', 'Bagan'],
+  ['/internal/lineup', 'Line-up'],
+  ['/internal/absen', 'Absen'],  // admin only, filtered at render
 ]
 
 const TODAY = new Date().toLocaleDateString('en-CA')  // YYYY-MM-DD, valid for date column
@@ -49,6 +53,8 @@ export function App() {
     '/internal-match': 'internal',
     '/internal/player': 'internal',
     '/internal/tournament': 'internal',
+    '/internal/lineup': 'internal',
+    '/internal/absen': 'internal',
   }
   const TAB_ROUTE: Record<Tab, string> = {
     lapangan: '/',
@@ -618,7 +624,7 @@ export function App() {
               {/* Two internal views under one nav item. The team builder keeps
                   its original /internal-match URL so existing links survive. */}
               <div className="im-segmented im-tabs" role="group" aria-label="Halaman internal">
-                {INTERNAL_TABS.map(([path, label]) => (
+                {INTERNAL_TABS.filter(([path]) => isAdmin || path !== '/internal/absen').map(([path, label]) => (
                   <button
                     key={path}
                     className={`im-seg${pathname === path ? ' on' : ''}`}
@@ -631,6 +637,8 @@ export function App() {
               </div>
               {pathname === '/internal/player' ? <InternalPlayers />
                 : pathname === '/internal/tournament' ? <InternalBracket />
+                : pathname === '/internal/lineup' ? <InternalLineup />
+                : pathname === '/internal/absen' ? <InternalAbsen />
                 : <InternalMatch />}
             </>
           )}

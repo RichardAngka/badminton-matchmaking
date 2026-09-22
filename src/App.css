@@ -1385,3 +1385,71 @@ body::before {
   font-size: 16px; font-weight: 800; color: var(--text);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+
+/* ── Line-up (/internal/lineup) ──────────────────────────────────────────── */
+.lu-wrap {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); overflow: hidden;
+}
+.lu { width: 100%; table-layout: fixed; border-collapse: collapse; }
+.lu-c0 { width: 76px; }
+.lu thead th {
+  padding: 9px 8px; background: var(--gold); color: #0A0800;
+  font-size: 13.5px; font-weight: 800; text-align: left;
+}
+.lu thead th:first-child { background: var(--card-lo); }
+.lu-team { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lu-count {
+  font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 800;
+  color: rgba(10,8,0,.62);
+}
+.lu-count.ok { color: #0A5C36; }
+.lu tbody tr { border-top: 1px solid var(--border); }
+.lu tbody tr:nth-child(even) { background: var(--card-lo); }
+.lu tbody th, .lu td { padding: 5px 8px; vertical-align: top; text-align: left; }
+.lu td + td { border-left: 1px solid var(--border); }
+/* One line per player; the level column uses the same height so each line
+   reads straight across: level → name → name. */
+.lu-line { display: flex; align-items: center; gap: 6px; height: 32px; min-width: 0; }
+.lu-num {
+  width: 20px; flex-shrink: 0; color: var(--dim);
+  font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 800;
+}
+.lu-name {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 13px; font-weight: 600; color: var(--text);
+}
+.lu-name.wo { color: var(--dim); font-style: italic; }
+.lu-sub {
+  flex-shrink: 0; color: #FFB020;
+  font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 800;
+}
+.lu-pick {
+  flex: 1; min-width: 0; height: 30px; padding: 0 4px;
+  background: var(--card); border: 1px solid var(--border-s); border-radius: var(--radius-xs);
+  color: var(--text); font: inherit; font-size: 12.5px; font-weight: 600;
+}
+.lu-pick.empty { border-style: dashed; color: var(--dim); }
+.lu-pick:focus-visible { outline: 2px solid var(--gold-dim); outline-offset: 1px; }
+@media (max-width: 480px) {
+  .lu-c0 { width: 70px; }
+  .lu-num { width: 16px; }
+  .lu tbody th, .lu td { padding: 5px 5px; }
+}
+/* A picked player not checked in for the day — holds the lineup back. */
+.lu-pick.away { border-color: var(--red); color: var(--red); }
+
+/* ── Absen (/internal/absen) ─────────────────────────────────────────────── */
+.ab-row {
+  width: 100%; font: inherit; text-align: left; cursor: pointer;
+  transition: background .12s ease, border-color .12s ease;
+}
+.ab-row:hover:not(.on) { border-color: var(--dim); }
+.ab-row:focus-visible { outline: 2px solid var(--gold-dim); outline-offset: 1px; }
+.ab-row.on { background: rgba(0,200,118,.1); border-color: rgba(0,200,118,.45); }
+.ab-check {
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  width: 22px; height: 22px; border-radius: 50%;
+  border: 1.5px solid var(--border-s); color: #0A0800; font-size: 13px; font-weight: 900;
+}
+.ab-row.on .ab-check { background: var(--green); border-color: var(--green); }

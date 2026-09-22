@@ -1,5 +1,6 @@
 import type {
-  Bracket, BracketKey, Gender, Score, ShirtSize, TeamId, TourLevel, TournamentState, TourPlayer,
+  Bracket, BracketKey, Day, Gender, Score, ShirtSize, Slot, TeamId, TourLevel, TournamentState,
+  TourPlayer,
 } from './types'
 import { fetchTournament, upsertTournament } from './supabase'
 
@@ -377,4 +378,65 @@ if (import.meta.env.DEV) {
   const flipped = editMatch(b, 'sf1', [4, 6])
   console.assert(flipped.partai.final === undefined && flipped.partai.third === undefined,
     '[bracket] new lineup kept a stale final / third-place result')
+}
+
+// ── Line-up (/internal/lineup) ───────────────────────────────────────────────
+// Slot ids are lowercase slugs, so the uppercase marker can't collide with one.
+export const WO = 'WO'
+
+/** The level each of the 20 slots is meant for: PARTAI flattened. */
+export const SLOTS: TourLevel[] = PARTAI.flat()
+
+export const DAY: Record<BracketKey, Day> = { sf1: 1, sf2: 1, final: 2, third: 2 }
+
+/**
+ * A team's 20 slots for a day. A player who has since left the team on the Tim
+ * page reads as empty, so a lineup can only ever show the current roster.
+ */
+export function lineupOf(state: TournamentState, team: TeamId, day: Day): Slot[] {
+  const ids = new Set(state.players.filter(p => !p.external && p.team === team).map(p => p.id))
+  const saved = state.lineups?.[team]?.[day] ?? []
+  return SLOTS.map((_, i) => {
+    const s = saved[i]
+    return s === WO || (s && ids.has(s)) ? s : null
+  })
+}
+
+/** Checked in for that day on /internal/absen. */
+export const isHere = (p: TourPlayer, day: Day) => !!p.present?.includes(day)
+
+/**
+ * Slots that can actually be played: WO, or a player in `here` (checked in
+ * that day). 20 means the lineup is complete — a picked no-show holds it back.
+ */
+export const ready = (slots: Slot[], here: Set<string>) =>
+  slots.filter(s => s === WO || (s !== null && here.has(s))).length
+
+/**
+ * Puts `v` in slot i. A player already sitting in another slot moves here
+ * (one partai per player per match); WO can fill any number of slots.
+ */
+export function setSlot(slots: Slot[], i: number, v: Slot): Slot[] {
+  const next = SLOTS.map((_, j) => (v && v !== WO && slots[j] === v ? null : slots[j] ?? null))
+  next[i] = v
+  return next
+}
+
+if (import.meta.env.DEV) {
+  console.assert(SLOTS.length === 20 && SLOTS[17] === 'W-B2', '[lineup] slot levels drifted from PARTAI')
+  let s = setSlot([], 0, 'jericko')
+  s = setSlot(s, 2, 'jericko')
+  console.assert(s[0] === null && s[2] === 'jericko', '[lineup] a picked player should move, not duplicate')
+  s = setSlot(setSlot(s, 4, WO), 5, WO)
+  console.assert(s[4] === WO && s[5] === WO, '[lineup] WO should fill many slots')
+  console.assert(ready(s, new Set()) === 2, '[lineup] a no-show counted as ready')
+  console.assert(ready(s, new Set(['jericko'])) === 3, '[lineup] a checked-in pick not counted')
+
+  const st = seedState()
+  st.players.find(p => p.id === 'jericko')!.team = 1
+  st.lineups = { 1: { 1: s } }
+  console.assert(lineupOf(st, 1, 1)[2] === 'jericko', '[lineup] current member dropped')
+  st.players.find(p => p.id === 'jericko')!.team = 2
+  const moved = lineupOf(st, 1, 1)
+  console.assert(moved[2] === null && moved[4] === WO, '[lineup] ex-member still shown, or WO lost')
 }
