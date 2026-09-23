@@ -1,6 +1,6 @@
 import type {
-  Bracket, BracketKey, Day, Gender, Score, ShirtSize, Slot, TeamId, TourLevel, TournamentState,
-  TourPlayer,
+  Bracket, BracketKey, Day, Gender, PartaiResult, Score, ShirtSize, Slot, TeamId, TourLevel,
+  TournamentState, TourPlayer,
 } from './types'
 import { fetchTournament, upsertTournament } from './supabase'
 
@@ -320,7 +320,7 @@ export function matchWinner([a, b]: Pair, s?: Score, tiebreak?: TeamId): TeamId 
  */
 export function resolve(b: Bracket) {
   const [sf1, sf2] = semis(b.draw)
-  const win = (k: BracketKey, pair: Pair) => matchWinner(pair, b.partai[k], b.tiebreak[k])
+  const win = (k: BracketKey, pair: Pair) => matchWinner(pair, tally(b, k), b.tiebreak[k])
   const lose = (pair: Pair, w?: TeamId) => w && pair.find(t => t !== w)
   const w1 = win('sf1', sf1)
   const w2 = win('sf2', sf2)
@@ -333,26 +333,37 @@ export function resolve(b: Bracket) {
   return { pairs, winner, podium }
 }
 
-/**
- * Sets one match's result. A new score arrives with no extra-match winner (it
- * only counts at 5–5), and if the edit changes who plays the final or the
- * third-place match, that match's result is dropped rather than left pointing
- * at the wrong teams.
- */
-export function editMatch(b: Bracket, k: BracketKey, partai?: Score, tiebreak?: TeamId): Bracket {
-  const next: Bracket = {
-    ...b,
-    partai: { ...b.partai, [k]: partai },
-    tiebreak: { ...b.tiebreak, [k]: tiebreak },
-  }
+/** Drops a final / third-place result that a changed semifinal invalidated. */
+function clearStale(b: Bracket, next: Bracket): Bracket {
   const [was, now] = [resolve(b).pairs, resolve(next).pairs]
   for (const d of ['final', 'third'] as const) {
     if (was[d][0] !== now[d][0] || was[d][1] !== now[d][1]) {
-      next.partai[d] = undefined
-      next.tiebreak[d] = undefined
+      next = {
+        ...next,
+        partai: { ...next.partai, [d]: undefined },
+        tiebreak: { ...next.tiebreak, [d]: undefined },
+        results: { ...next.results, [d]: undefined },
+      }
     }
   }
   return next
+}
+
+/**
+ * Edits one partai of one match — its court, points, or officials. Points can
+ * flip a semifinal, so whatever the new lineup invalidates is dropped rather
+ * than left pointing at the wrong teams.
+ */
+export function setPartai(
+  b: Bracket, k: BracketKey, i: number, patch: Partial<PartaiResult>,
+): Bracket {
+  const rs = PARTAI.map((_, j) => ({ ...b.results?.[k]?.[j], ...(j === i ? patch : {}) }))
+  return clearStale(b, { ...b, results: { ...b.results, [k]: rs } })
+}
+
+/** The extra partai's winner, which only counts at 5–5. */
+export function setTiebreak(b: Bracket, k: BracketKey, t?: TeamId): Bracket {
+  return clearStale(b, { ...b, tiebreak: { ...b.tiebreak, [k]: t } })
 }
 
 if (import.meta.env.DEV) {
@@ -363,21 +374,34 @@ if (import.meta.env.DEV) {
   console.assert(matchWinner([1, 2], [5, 5]) === undefined, '[bracket] 5–5 needs the extra match')
   console.assert(matchWinner([1, 2], [5, 5], 2) === 2, '[bracket] extra match decides 5–5')
   console.assert(matchWinner([1, 2], [6, 4], 2) === 1, '[bracket] stale extra match overrode 6–4')
+  console.assert(partaiWinner({ score: [21, 21] }) === undefined, '[bracket] a draw has no winner')
+  console.assert(partaiWinner({ score: [18, 42] }) === 1, '[bracket] higher points should win')
 
-  // draw 4: SF 1 = 1 v 4, SF 2 = 2 v 3
-  let b = editMatch(EMPTY_BRACKET, 'sf1', [6, 4])
-  b = editMatch(b, 'sf2', [5, 5], 3)
-  b = editMatch(b, 'final', [4, 6])
-  b = editMatch(b, 'third', [6, 4])
+  // draw 4: SF 1 = 1 v 4, SF 2 = 2 v 3. The first `n` partai go to the left side.
+  const won = (b: Bracket, k: BracketKey, n: number) =>
+    PARTAI.reduce((acc, _, i) => setPartai(acc, k, i, { score: i < n ? [42, 0] : [0, 42] }), b)
+
+  let b = won(EMPTY_BRACKET, 'sf1', 6)
+  console.assert(tally(b, 'sf1')!.join() === '6,4', '[bracket] points did not tally', tally(b, 'sf1'))
+  b = won(b, 'sf2', 5)
+  console.assert(resolve(b).winner.sf2 === undefined, '[bracket] 5–5 decided without the extra partai')
+  b = setTiebreak(b, 'sf2', 3)
+  b = won(b, 'final', 4)   // 4–6: Team 3 wins the final
+  b = won(b, 'third', 6)
   const r = resolve(b)
   console.assert(r.pairs.final.join() === '1,3', '[bracket] wrong finalists', r)
   console.assert(r.pairs.third.join() === '4,2', '[bracket] third place is not the SF losers', r)
   console.assert(r.podium.join() === '3,1,4', '[bracket] wrong podium', r)
-  console.assert(resolve(editMatch(b, 'sf1', [7, 3])).podium.join() === '3,1,4',
+  console.assert(resolve(setPartai(b, 'sf1', 9, { score: [42, 0] })).podium.join() === '3,1,4',
     '[bracket] same SF winner should keep later results')
-  const flipped = editMatch(b, 'sf1', [4, 6])
-  console.assert(flipped.partai.final === undefined && flipped.partai.third === undefined,
+  console.assert(setPartai(b, 'sf1', 0, { court: 2 }).results?.final !== undefined,
+    '[bracket] a court edit should not clear the final')
+  const flipped = setPartai(b, 'sf1', 0, { score: [0, 42] })  // 5–5: SF 1 has no winner now
+  console.assert(flipped.results?.final === undefined && flipped.results?.third === undefined,
     '[bracket] new lineup kept a stale final / third-place result')
+  console.assert(tally(EMPTY_BRACKET, 'sf1') === undefined, '[bracket] empty match should have no score')
+  console.assert(tally({ ...EMPTY_BRACKET, partai: { sf1: [6, 4] } }, 'sf1')!.join() === '6,4',
+    '[bracket] a hand-entered score should still be read')
 }
 
 // ── Line-up (/internal/lineup) ───────────────────────────────────────────────
@@ -411,6 +435,47 @@ export const isHere = (p: TourPlayer, day: Day) => !!p.present?.includes(day)
  */
 export const ready = (slots: Slot[], here: Set<string>) =>
   slots.filter(s => s === WO || (s !== null && here.has(s))).length
+
+// ── Points, courts and officials (/internal/lineup) ──────────────────────────
+export const COURTS = [1, 2, 3, 4]
+export const MAX_POINT = 42
+
+/** Which side of the pair won a partai: 0, 1, or undefined while undecided. */
+export function partaiWinner(r?: PartaiResult): 0 | 1 | undefined {
+  const s = r?.score
+  if (!s || s[0] === s[1]) return undefined
+  return s[0] > s[1] ? 0 : 1
+}
+
+/**
+ * Partai won by each side of a match, counted from the points entered. Falls
+ * back to the hand-entered score for a match that has no points at all, so a
+ * row saved before this page existed still shows its result.
+ */
+export function tally(b: Bracket, k: BracketKey): Score | undefined {
+  const rs = b.results?.[k]
+  if (!rs?.some(r => partaiWinner(r) !== undefined)) return b.partai[k]
+  const out: Score = [0, 0]
+  for (const r of rs) {
+    const w = partaiWinner(r)
+    if (w !== undefined) out[w]++
+  }
+  return out
+}
+
+/** The other match of the same day — the one whose courts can clash. */
+export const OTHER: Record<BracketKey, BracketKey> =
+  { sf1: 'sf2', sf2: 'sf1', final: 'third', third: 'final' }
+
+/**
+ * Who may officiate a match: the two teams not playing it, checked in that day.
+ * Sorted by team, then name, the way the selector lists them.
+ */
+export function officials(state: TournamentState, playing: (TeamId | undefined)[], day: Day) {
+  return state.players
+    .filter(p => !p.external && p.team !== null && !playing.includes(p.team) && isHere(p, day))
+    .sort((a, b) => a.team! - b.team! || a.name.localeCompare(b.name))
+}
 
 /**
  * Puts `v` in slot i. A player already sitting in another slot moves here

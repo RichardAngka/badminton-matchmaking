@@ -1061,6 +1061,18 @@ body::before {
   animation: auth-error-in 0.2s ease both;
 }
 
+.auth-note {
+  font-size: 12px; color: var(--gold); margin: 0; line-height: 1.4;
+  animation: auth-error-in 0.2s ease both;
+}
+
+/* Switch between signing in and a captain creating their own password. */
+.auth-swap {
+  background: none; border: none; padding: 4px 0;
+  color: var(--dim); font: inherit; font-size: 12.5px; cursor: pointer;
+}
+.auth-swap:hover { color: var(--text); text-decoration: underline; }
+
 @media (prefers-reduced-motion: reduce) {
   .auth-form { animation: none; }
   .auth-form button[type=submit]::before { display: none; }
@@ -1453,3 +1465,40 @@ body::before {
   border: 1.5px solid var(--border-s); color: #0A0800; font-size: 13px; font-weight: 900;
 }
 .ab-row.on .ab-check { background: var(--green); border-color: var(--green); }
+
+/* Line-up: winner marks, partai meta line and the per-partai panel. */
+.lu td.win { background: rgba(0,200,118,.08); }
+.lu td.lose .lu-name { color: var(--dim); }
+.lu-win { flex-shrink: 0; color: var(--green); font-weight: 900; font-size: 12px; }
+.lu-head-n { display: flex; align-items: center; gap: 6px; }
+.lu-score {
+  font-family: 'JetBrains Mono', monospace; font-size: 15px; font-weight: 800; color: #0A0800;
+}
+.lu-name.hid { color: var(--dim); }
+.lu-meta-row td { padding: 0 8px 6px; }
+.lu-meta {
+  display: flex; align-items: center; gap: 6px; width: 100%;
+  background: none; border: none; padding: 2px 0; cursor: pointer;
+  color: var(--dim); font: inherit; font-size: 11.5px; font-weight: 600; text-align: left;
+}
+.lu-meta:hover { color: var(--text); }
+.lu-meta:focus-visible { outline: 2px solid var(--gold-dim); outline-offset: 2px; }
+.lu-meta-txt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lu-meta-caret { flex-shrink: 0; }
+.lu-panel-row td { padding: 0 8px 10px; }
+.lu-panel { display: flex; flex-direction: column; gap: 8px;
+  background: var(--card-lo); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 10px; }
+.lu-panel > div { display: flex; align-items: center; gap: 8px; }
+.lu-panel dt { flex: 0 0 72px; font-size: 11.5px; font-weight: 700; color: var(--dim); }
+.lu-panel dd { flex: 1; min-width: 0; font-size: 13px; font-weight: 600; color: var(--text); }
+.lu-points { display: flex; gap: 6px; }
+.lu-in {
+  width: 100%; min-width: 0; height: 32px; padding: 0 6px;
+  background: var(--card); border: 1px solid var(--border-s); border-radius: var(--radius-xs);
+  color: var(--text); font: inherit; font-size: 12.5px; font-weight: 600;
+}
+.lu-in.away { border-color: var(--red); color: var(--red); }
+.lu-in:focus-visible { outline: 2px solid var(--gold-dim); outline-offset: 1px; }
+.lu-point { text-align: center; font-family: 'JetBrains Mono', monospace; font-size: 14px; }
+.btn.on { border-color: var(--gold-dim); color: var(--gold); }

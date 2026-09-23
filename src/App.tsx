@@ -17,14 +17,14 @@ import { InternalBracket } from './components/InternalBracket'
 import { InternalLineup } from './components/InternalLineup'
 import { InternalAbsen } from './components/InternalAbsen'
 import { matchCostByPlayer, playerTotal } from './ledgerMath'
-import { useIsAdmin } from './RoleContext'
+import { useCaptainTeam, useIsAdmin, useSignedIn } from './RoleContext'
 
 const INTERNAL_TABS: [string, string][] = [
   ['/internal-match', 'Tim'],
   ['/internal/player', 'Baju'],
   ['/internal/tournament', 'Bagan'],
   ['/internal/lineup', 'Line-up'],
-  ['/internal/absen', 'Absen'],  // admin only, filtered at render
+  ['/internal/absen', 'Absen'],  // admin + captains, filtered at render
 ]
 
 const TODAY = new Date().toLocaleDateString('en-CA')  // YYYY-MM-DD, valid for date column
@@ -73,6 +73,8 @@ export function App() {
   }, [anyModalOpen])
 
   const isAdmin = useIsAdmin()
+  const captainTeam = useCaptainTeam()
+  const signedIn = useSignedIn()
   const isHistorical = selectedDate !== TODAY
 
   // Main state query — keyed by date so switching sessions re-fetches cleanly
@@ -330,14 +332,14 @@ export function App() {
           </button>
         </nav>
         <div className="sidebar-foot">
-          {isAdmin
+          {signedIn
             ? <button className="nav-item" style={{ color: 'var(--muted)' }}
                 onClick={() => supabase?.auth.signOut()} title="Keluar">
                 <Icon name="logout" /><span>Keluar</span>
               </button>
             : <button className="nav-item" style={{ color: 'var(--muted)' }}
-                onClick={() => window.dispatchEvent(new Event('open-admin-login'))} title="Login Admin">
-                <Icon name="logout" /><span>Login Admin</span>
+                onClick={() => window.dispatchEvent(new Event('open-admin-login'))} title="Login">
+                <Icon name="logout" /><span>Login</span>
               </button>}
         </div>
       </aside>
@@ -371,8 +373,8 @@ export function App() {
             </div>
             <button className="icon-btn" onClick={() => setLedgerOpen(true)} title="Live Ledger"><Icon name="wallet" /></button>
             {isAdmin && <button className="icon-btn" onClick={() => setConfigOpen(true)} title="Konfigurasi"><Icon name="gear" /></button>}
-            <button className="icon-btn sidebar-foot-mobile" title={isAdmin ? 'Keluar' : 'Login Admin'}
-              onClick={() => isAdmin ? supabase?.auth.signOut() : window.dispatchEvent(new Event('open-admin-login'))}>
+            <button className="icon-btn sidebar-foot-mobile" title={signedIn ? 'Keluar' : 'Login'}
+              onClick={() => signedIn ? supabase?.auth.signOut() : window.dispatchEvent(new Event('open-admin-login'))}>
               <Icon name="logout" />
             </button>
             <button className="btn btn-primary new-match-btn" onClick={() => setQueueOpen(true)} disabled={!isAdmin}>
@@ -624,7 +626,9 @@ export function App() {
               {/* Two internal views under one nav item. The team builder keeps
                   its original /internal-match URL so existing links survive. */}
               <div className="im-segmented im-tabs" role="group" aria-label="Halaman internal">
-                {INTERNAL_TABS.filter(([path]) => isAdmin || path !== '/internal/absen').map(([path, label]) => (
+                {INTERNAL_TABS
+                  .filter(([path]) => isAdmin || captainTeam || path !== '/internal/absen')
+                  .map(([path, label]) => (
                   <button
                     key={path}
                     className={`im-seg${pathname === path ? ' on' : ''}`}

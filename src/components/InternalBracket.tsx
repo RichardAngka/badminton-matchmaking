@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { Bracket, BracketKey, Score, TeamId } from '../types'
-import { EMPTY_BRACKET, PARTAI, editMatch, loadTournament, resolve, semis } from '../internalMatch'
+import { EMPTY_BRACKET, PARTAI, loadTournament, resolve, semis, setTiebreak, tally } from '../internalMatch'
 import { TOURNAMENT_ID, supabase, upsertTournament } from '../supabase'
 import { useIsAdmin } from '../RoleContext'
 
@@ -53,21 +53,20 @@ export function InternalBracket() {
 
   const setDraw = (draw: Bracket['draw']) => {
     if (draw === b.draw) return
-    if (Object.values(b.partai).some(Boolean)
+    if (Object.values(b.results ?? {}).some(Boolean) || Object.values(b.partai).some(Boolean)
       && !confirm('Ganti undian semifinal? Semua hasil akan direset.')) return
-    save({ draw, partai: {}, tiebreak: {} })
+    save({ draw, partai: {}, tiebreak: {}, results: {} })
   }
 
   const card = (k: BracketKey, label: string, tbd: string[] = []) => (
     <MatchCard
       label={label}
       teams={pairs[k].map((t, i) => (t ? { id: t, name: name(t) } : { tbd: tbd[i] }))}
-      score={b.partai[k]}
+      score={tally(b, k)}
       tiebreak={b.tiebreak[k]}
       winner={winner[k]}
       isAdmin={isAdmin}
-      onScore={s => save(editMatch(b, k, s))}
-      onTiebreak={t => save(editMatch(b, k, b.partai[k], b.tiebreak[k] === t ? undefined : t))}
+      onTiebreak={t => save(setTiebreak(b, k, b.tiebreak[k] === t ? undefined : t))}
     />
   )
 
@@ -78,7 +77,7 @@ export function InternalBracket() {
           <h2>Bagan</h2>
           <span className="ws-head-sub">
             {isAdmin
-              ? `Isi partai yang dimenangkan (dari ${PARTAI.length}). Seri 5–5 → partai tambahan.`
+              ? `Terisi sendiri dari poin di Line-up (dari ${PARTAI.length}). Seri 5–5 → partai tambahan.`
               : 'Semifinal → Final & Juara 3'}
           </span>
         </div>
@@ -123,14 +122,13 @@ export function InternalBracket() {
   )
 }
 
-function MatchCard({ label, teams, score, tiebreak, winner, isAdmin, onScore, onTiebreak }: {
+function MatchCard({ label, teams, score, tiebreak, winner, isAdmin, onTiebreak }: {
   label: string
   teams: ({ id: TeamId; name: string } | { tbd: string })[]
   score?: Score
   tiebreak?: TeamId
   winner?: TeamId
   isAdmin: boolean
-  onScore: (s: Score) => void
   onTiebreak: (t: TeamId) => void
 }) {
   const ready = teams.every(t => 'id' in t)
@@ -147,20 +145,8 @@ function MatchCard({ label, teams, score, tiebreak, winner, isAdmin, onScore, on
           <div key={t.id} className={`br-team${winner === t.id ? ' win' : winner ? ' lose' : ''}`}>
             <span className="br-team-name">{t.name}</span>
             {winner === t.id && <span className="br-check" aria-label="Menang">✓</span>}
-            {isAdmin && ready
-              // All 10 partai are always played, so one side's count fixes the
-              // other's: picking 4 here makes the opponent 6.
-              ? <select className="br-partai" aria-label={`Partai ${t.name}`}
-                  value={mine ?? ''}
-                  onChange={e => {
-                    const n = Number(e.target.value)
-                    onScore(i === 0 ? [n, PARTAI.length - n] : [PARTAI.length - n, n])
-                  }}>
-                  {mine === undefined && <option value="" disabled>–</option>}
-                  {Array.from({ length: PARTAI.length + 1 }, (_, n) =>
-                    <option key={n} value={n}>{n}</option>)}
-                </select>
-              : <span className="br-partai static">{mine ?? ''}</span>}
+            {/* Counted from the points entered on /internal/lineup, never typed here. */}
+            <span className="br-partai static">{mine ?? ''}</span>
           </div>
         )
       })}

@@ -3,18 +3,19 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { Day, TourPlayer, TournamentState } from '../types'
 import { EMPTY_BRACKET, LEVEL_CLASS, TEAM_IDS, isHere, loadTournament, resolve } from '../internalMatch'
 import { TOURNAMENT_ID, supabase, upsertTournament } from '../supabase'
-import { useIsAdmin } from '../RoleContext'
+import { useCaptainTeam, useIsAdmin } from '../RoleContext'
 
 const DAYS: Day[] = [1, 2]
 
 export function InternalAbsen() {
   const isAdmin = useIsAdmin()
+  const captain = useCaptainTeam()
   const qc = useQueryClient()
   const [search, setSearch] = useState('')
   const [picked, setPicked] = useState<Day | null>(null)  // null = follow the bracket
   const searchRef = useRef<HTMLInputElement>(null)
 
-  // No polling: this page is admin-only and Realtime covers the other admins.
+  // No polling: only admins and captains open this page, and Realtime covers them.
   const { data: state } = useQuery({ queryKey: ['tournament'], queryFn: loadTournament })
 
   // Check-in is rapid tapping at the door. The scope runs writes one at a
@@ -36,12 +37,14 @@ export function InternalAbsen() {
     return () => { supabase?.removeChannel(channel) }
   }, [qc])
 
-  if (!isAdmin) return <div className="im-empty">Khusus admin.</div>
+  if (!isAdmin && !captain) return <div className="im-empty">Khusus admin dan kapten tim.</div>
   if (!state) return <div className="im-loading">Memuat absen…</div>
 
   // Day 2 is the day after the semis, so once both have a winner, open on it.
   const day = picked ?? (resolve({ ...EMPTY_BRACKET, ...state.bracket }).pairs.final.every(Boolean) ? 2 : 1)
-  const roster = state.players.filter(p => !p.external && p.team !== null)
+  // A captain only ever sees their own team — the other rosters are not listed.
+  const roster = state.players.filter(p =>
+    !p.external && p.team !== null && (!captain || p.team === captain))
   const q = search.trim().toLowerCase()
 
   // ponytail: whole-blob write per tap, last-write-wins against another admin
@@ -63,7 +66,7 @@ export function InternalAbsen() {
     if (q && !here) { setSearch(''); searchRef.current?.focus() }
   }
 
-  const teams = TEAM_IDS.map(t => {
+  const teams = (captain ? [captain] : TEAM_IDS).map(t => {
     const members = roster.filter(p => p.team === t)
     return {
       t, count: members.length,
@@ -78,7 +81,9 @@ export function InternalAbsen() {
       <div className="ws-head">
         <div className="ws-head-l">
           <h2>Absen</h2>
-          <span className="ws-head-sub">Ketuk pemain yang sudah datang</span>
+          <span className="ws-head-sub">
+            {captain ? `Ketuk pemain ${state.teamNames[captain]} yang sudah datang` : 'Ketuk pemain yang sudah datang'}
+          </span>
         </div>
         <span className="ws-pill">Hadir {roster.filter(p => isHere(p, day)).length}/{roster.length}</span>
       </div>

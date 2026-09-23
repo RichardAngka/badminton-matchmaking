@@ -82,12 +82,23 @@ export interface TourPlayer {
 // Only the draw and results are stored; every winner, the final and third-place
 // lineups and the podium are derived from them, so they can't disagree.
 export type BracketKey = 'sf1' | 'sf2' | 'final' | 'third'  // third = semifinal losers
-export type Score = [number, number]  // partai won out of 10, in the pair's order
+export type Score = [number, number]  // a pair of numbers in the pair's order
+
+// One partai of a match: how it was played and how it ended.
+export interface PartaiResult {
+  court?: number    // 1–4
+  score?: Score     // points, 0–42 each — the higher one wins the partai
+  wasit?: string    // player id, from a team not playing this match
+  lines?: string[]  // up to 2 linesman player ids, same teams as the wasit
+}
 
 export interface Bracket {
   draw: 2 | 3 | 4   // Team 1's semifinal opponent; the other two meet in SF 2
+  // Partai won, hand-entered before points existed. Only read for a match whose
+  // partai have no points yet, so old rows still show their result.
   partai: Partial<Record<BracketKey, Score>>
   tiebreak: Partial<Record<BracketKey, TeamId>>  // extra-match winner, only read at 5–5
+  results?: Partial<Record<BracketKey, PartaiResult[]>>  // one per partai, in PARTAI order
 }
 
 // ── Line-up (/internal/lineup) ───────────────────────────────────────────────
