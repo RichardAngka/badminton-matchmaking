@@ -1502,3 +1502,120 @@ body::before {
 .lu-in:focus-visible { outline: 2px solid var(--gold-dim); outline-offset: 1px; }
 .lu-point { text-align: center; font-family: 'JetBrains Mono', monospace; font-size: 14px; }
 .btn.on { border-color: var(--gold-dim); color: var(--gold); }
+
+/* ── Jadwal / rundown (/internal/jadwal) ─────────────────────────────────────
+   Google-Calendar layout: an hour gutter plus one column per day, events
+   absolutely positioned by clock time. Both days always show, so the grid
+   scrolls sideways on a phone rather than squeezing four match columns. */
+.rd-grid { --rd-head: 56px; display: flex; gap: 10px; overflow-x: auto; padding-bottom: 8px; }
+.rd-gutter { flex: 0 0 40px; }
+.rd-pad { height: var(--rd-head); }
+.rd-hour {
+  position: absolute; right: 6px; transform: translateY(-50%);
+  font-family: 'JetBrains Mono', monospace; font-size: 10.5px; font-weight: 700; color: var(--dim);
+}
+.rd-day { flex: 1 1 0; min-width: 330px; }
+.rd-head {
+  height: var(--rd-head); display: flex; flex-direction: column; justify-content: center; gap: 3px;
+  padding: 0 8px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+}
+.rd-head-day { font-size: 12.5px; font-weight: 800; color: var(--gold); }
+.rd-head-win {
+  font-family: 'JetBrains Mono', monospace; font-size: 10.5px; font-weight: 700; color: var(--dim);
+}
+.rd-head-cols { display: flex; }
+.rd-head-col { flex: 1 1 0; min-width: 0; display: flex; align-items: baseline; gap: 5px; }
+.rd-head-k { font-size: 11px; font-weight: 800; color: var(--text); flex-shrink: 0; }
+.rd-head-v {
+  min-width: 0; font-size: 10.5px; color: var(--dim);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.rd-body {
+  position: relative; background: var(--surface);
+  border: 1px solid var(--border); border-top: none;
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+}
+/* A line every 15 minutes as a reading aid — times themselves snap to 5. The
+   hour line is the solid one, the three quarters are faint. */
+.rd-line { position: absolute; left: 0; right: 0; border-top: 1px solid var(--border); }
+.rd-line.q { border-top-color: var(--border); opacity: .4; }
+.rd-now { position: absolute; left: 0; right: 0; border-top: 2px solid var(--red); z-index: 3; }
+.rd-now::before {
+  content: ''; position: absolute; left: 0; top: -4px;
+  width: 7px; height: 7px; border-radius: 50%; background: var(--red);
+}
+.rd-ev {
+  position: absolute; z-index: 2; overflow: hidden; padding: 3px 5px;
+  border: 1px solid var(--gold-dim); border-left: 3px solid var(--gold);
+  border-radius: var(--radius-xs); background: var(--gold-bg);
+}
+/* Full width and above the partai blocks. The partai are scheduled around an
+   acara, so this only ever overlaps another acara. */
+.rd-ev.acara {
+  left: 0; width: 100%; z-index: 4;
+  background: #10251b; border-color: rgba(0,200,118,.45); border-left-color: var(--green);
+}
+.rd-ev.match { box-shadow: inset 0 0 0 1px var(--bg); }
+/* Admins can drag an acara straight from the timeline, no edit mode needed.
+   touch-action: none hands the vertical gesture to us instead of page scroll —
+   confined to the acara blocks, so the rest of the grid still scrolls on touch. */
+.rd-ev.acara.grabbable { cursor: grab; touch-action: none; user-select: none; }
+.rd-ev.acara.held {
+  cursor: grabbing; z-index: 6; border-style: solid;
+  box-shadow: 0 8px 18px rgba(0,0,0,.5); border-color: var(--green);
+}
+.rd-handle { position: absolute; left: 0; right: 0; bottom: 0; height: 11px; cursor: ns-resize; }
+.rd-handle::after {
+  content: ''; position: absolute; left: 50%; bottom: 2px; width: 26px; height: 2px;
+  transform: translateX(-50%); border-radius: 2px; background: rgba(0,200,118,.55);
+}
+.rd-ev-t { display: flex; align-items: center; gap: 4px; margin-bottom: 2px; }
+.rd-ev .lvl-badge { font-size: 8.5px; padding: 0 3px; }
+.rd-title { font-size: 12.5px; font-weight: 800; color: var(--text); }
+.rd-ev-time { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--muted); }
+.rd-p {
+  font-family: 'JetBrains Mono', monospace; font-size: 10.5px; font-weight: 800; color: var(--gold);
+}
+.rd-lap {
+  margin-left: auto; flex-shrink: 0;
+  font-family: 'JetBrains Mono', monospace; font-size: 9.5px; font-weight: 700; color: var(--muted);
+}
+.rd-side { display: flex; align-items: center; gap: 4px; }
+.rd-names {
+  flex: 1; min-width: 0; font-size: 10.5px; font-weight: 600; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.rd-names.hid { color: var(--dim); font-style: italic; }
+.rd-names .away { color: var(--red); }
+.rd-side.win .rd-names { color: var(--green); }
+.rd-side.lose { opacity: .5; }
+.rd-pt {
+  flex-shrink: 0; font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; font-weight: 800; color: var(--gold-2);
+}
+.rd-wait { font-size: 10.5px; color: var(--dim); font-style: italic; }
+@media (max-width: 480px) {
+  .rd-day { min-width: 300px; }
+  .rd-names { font-size: 10px; }
+}
+
+/* Admin schedule editor. Native time inputs with step=900, so the picker itself
+   moves in 5-minute jumps; every value is snapped again on the way in. */
+.rd-edit {
+  display: flex; flex-direction: column; gap: 12px; margin-bottom: 14px; padding: 12px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
+}
+.rd-edit-day { display: flex; flex-direction: column; gap: 8px; }
+.rd-edit-head { font-size: 11.5px; font-weight: 800; color: var(--gold); }
+.rd-edit-row { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; }
+.rd-edit-row > .lu-in { flex: 1 1 120px; min-width: 100px; }
+.rd-edit-row .rd-t { flex: 0 0 110px; }
+.rd-f { display: flex; flex-direction: column; gap: 3px; flex: 0 0 auto; }
+.rd-f > span { font-size: 11px; font-weight: 700; color: var(--dim); }
+.rd-f > .lu-in { width: 118px; }
+.rd-edit-note { margin-left: auto; padding-bottom: 8px; font-size: 11.5px; color: var(--dim); }
+@media (max-width: 480px) {
+  .rd-edit-row .rd-t { flex: 1 1 88px; }
+  .rd-edit-note { margin-left: 0; }
+}

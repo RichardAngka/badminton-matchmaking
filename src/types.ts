@@ -109,9 +109,33 @@ export interface Bracket {
 export type Day = 1 | 2
 export type Slot = string | null
 
+// ── Rundown (/internal/jadwal) ────────────────────────────────────────────────
+// Every time is "HH:MM" snapped to 5 minutes. The match window is a start plus
+// one duration per partai, so its end is derived and can never disagree with
+// PARTAI — an end time stored next to a duration could.
+export interface Acara { start: string; end: string; title: string }
+
+// A drag in progress on /internal/jadwal: which acara, how far it has been
+// pulled in minutes, and whether the bottom edge is moving rather than the
+// block. `minutes` is raw — shift() snaps it, so the block can follow the
+// cursor pixel for pixel while only 5-minute values are ever saved.
+export interface Drag { d: Day; i: number; minutes: number; edge: boolean }
+
+// No per-partai duration here: one partai is estimated at PARTAI_MIN minutes,
+// owned by the code so no saved row can hold a stale one.
+export interface Rundown {
+  start: string   // first partai of the day
+  acara: Partial<Record<Day, Acara[]>>
+  // Kickoff an admin set for one partai, keyed by day then partai index. It only
+  // ever delays — the partai after it follow, so a match that runs long pushes
+  // the rest of its day instead of overlapping it.
+  starts?: Partial<Record<Day, Record<number, string>>>
+}
+
 export interface TournamentState {
   teamNames: Record<TeamId, string>
   players: TourPlayer[]
   bracket?: Bracket  // optional: rows saved before the bracket page existed
   lineups?: Partial<Record<TeamId, Partial<Record<Day, Slot[]>>>>
+  rundown?: Rundown  // absent = DEFAULT_RUNDOWN
 }

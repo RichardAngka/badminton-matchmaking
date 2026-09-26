@@ -16,6 +16,7 @@ import { InternalPlayers } from './components/InternalPlayers'
 import { InternalBracket } from './components/InternalBracket'
 import { InternalLineup } from './components/InternalLineup'
 import { InternalAbsen } from './components/InternalAbsen'
+import { InternalRundown } from './components/InternalRundown'
 import { matchCostByPlayer, playerTotal } from './ledgerMath'
 import { useCaptainTeam, useIsAdmin, useSignedIn } from './RoleContext'
 
@@ -24,6 +25,7 @@ const INTERNAL_TABS: [string, string][] = [
   ['/internal/player', 'Baju'],
   ['/internal/tournament', 'Bagan'],
   ['/internal/lineup', 'Line-up'],
+  ['/internal/jadwal', 'Jadwal'],
   ['/internal/absen', 'Absen'],  // admin + captains, filtered at render
 ]
 
@@ -54,6 +56,7 @@ export function App() {
     '/internal/player': 'internal',
     '/internal/tournament': 'internal',
     '/internal/lineup': 'internal',
+    '/internal/jadwal': 'internal',
     '/internal/absen': 'internal',
   }
   const TAB_ROUTE: Record<Tab, string> = {
@@ -642,6 +645,7 @@ export function App() {
               {pathname === '/internal/player' ? <InternalPlayers />
                 : pathname === '/internal/tournament' ? <InternalBracket />
                 : pathname === '/internal/lineup' ? <InternalLineup />
+                : pathname === '/internal/jadwal' ? <InternalRundown />
                 : pathname === '/internal/absen' ? <InternalAbsen />
                 : <InternalMatch />}
             </>

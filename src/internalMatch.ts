@@ -1,6 +1,6 @@
 import type {
-  Bracket, BracketKey, Day, Gender, PartaiResult, Score, ShirtSize, Slot, TeamId, TourLevel,
-  TournamentState, TourPlayer,
+  Acara, Bracket, BracketKey, Day, Drag, Gender, PartaiResult, Rundown, Score, ShirtSize, Slot,
+  TeamId, TourLevel, TournamentState, TourPlayer,
 } from './types'
 import { fetchTournament, upsertTournament } from './supabase'
 
@@ -504,4 +504,239 @@ if (import.meta.env.DEV) {
   st.players.find(p => p.id === 'jericko')!.team = 2
   const moved = lineupOf(st, 1, 1)
   console.assert(moved[2] === null && moved[4] === WO, '[lineup] ex-member still shown, or WO lost')
+}
+
+// ── Rundown (/internal/jadwal) ───────────────────────────────────────────────
+// Every time on the timeline snaps to 5 minutes: the <input type="time"> steps
+// in 5s, drags round to 5, and a typed 17:07 becomes 17:05. The grid still draws
+// a line every 15 minutes — that is a reading aid, not the step.
+export const STEP = 5
+
+export const mins = (t: string) => +t.slice(0, 2) * 60 + +t.slice(3, 5)
+// Wraps: 10 partai x 45 min runs past midnight, and "01:30" reads better than
+// "25:30". Positions on the grid stay linear — only the label wraps.
+export const clock = (m: number) => {
+  const d = ((m % 1440) + 1440) % 1440
+  return `${String(Math.floor(d / 60)).padStart(2, '0')}:${String(d % 60).padStart(2, '0')}`
+}
+
+/** Nearest STEP minutes, inside one day. */
+export const snap = (m: number) => Math.min(24 * 60 - STEP, Math.max(0, Math.round(m / STEP) * STEP))
+export const snapTime = (t: string) => clock(snap(mins(t)))
+
+/** Perkiraan satu partai. 10 partai dari jam 18:00 = selesai 21:20. */
+export const PARTAI_MIN = 20
+
+export const DEFAULT_RUNDOWN: Rundown = {
+  start: '18:00',   // jam 6 malam
+  acara: {
+    1: [{ start: '17:30', end: '18:00', title: 'Foto Bersama' }],
+    2: [
+      { start: '16:30', end: '17:00', title: 'Tumpengan' },
+      { start: '17:00', end: '17:30', title: 'Foto Bersama' },
+      { start: '17:30', end: '18:00', title: 'Yel Yel' },
+    ],
+  },
+}
+
+/** The stored rundown, or the default for a row saved before this page existed. */
+export const rundownOf = (state: TournamentState): Rundown => ({ ...DEFAULT_RUNDOWN, ...state.rundown })
+
+export const acaraOf = (r: Rundown, day: Day): Acara[] =>
+  [...(r.acara[day] ?? [])].sort((a, b) => mins(a.start) - mins(b.start))
+
+/**
+ * When each partai of a day starts. Acara win the timeline: a partai is pushed
+ * past any it would overlap, so adding a ceremony — or stretching one — delays
+ * the rest of the day instead of colliding with it. Days are computed
+ * separately because their acara differ.
+ *
+ * ponytail: rescans the acara per partai (4 x 10) rather than merging intervals
+ * first; make it a merge pass if a day ever has dozens of acara.
+ */
+export function partaiTimes(r: Rundown, day: Day): number[] {
+  const acara = acaraOf(r, day)   // sorted by start, so one pass per partai chains correctly
+  const fixed = r.starts?.[day] ?? {}
+  const out: number[] = []
+  let t = mins(r.start)
+  for (let p = 0; p < PARTAI.length; p++) {
+    const set = fixed[p]
+    if (set) t = Math.max(t, mins(set))   // an admin's kickoff delays, never pulls earlier
+    for (const a of acara) {
+      if (mins(a.start) < t + PARTAI_MIN && mins(a.end) > t) t = mins(a.end)
+    }
+    out.push(t)
+    t += PARTAI_MIN
+  }
+  return out
+}
+
+/**
+ * Side-by-side lanes for acara that overlap in time, the way a calendar splits
+ * concurrent events. Without this the later block simply covers the earlier one.
+ * `list` must be sorted by start, as acaraOf() returns it.
+ */
+export function lanes(list: Acara[]): { lane: number; of: number }[] {
+  const out = list.map(() => ({ lane: 0, of: 1 }))
+  let group: number[] = []
+  let groupEnd = -1
+  const flush = () => {
+    group.forEach((idx, n) => { out[idx] = { lane: n, of: group.length } })
+    group = []
+    groupEnd = -1
+  }
+  list.forEach((a, i) => {
+    if (group.length && mins(a.start) >= groupEnd) flush()
+    group.push(i)
+    groupEnd = Math.max(groupEnd, mins(a.end))
+  })
+  flush()
+  return out
+}
+
+/** When the last partai of a day finishes. */
+export function playEnd(r: Rundown, day: Day): number {
+  const t = partaiTimes(r, day)
+  return t[t.length - 1] + PARTAI_MIN
+}
+
+/**
+ * A drag applied to the rundown: moving keeps the acara's length, dragging its
+ * bottom edge changes only the end. Clamped inside the day and never shorter
+ * than one step. The page renders the preview from this and then writes the
+ * same call's result, so what you drop is exactly what you saw.
+ */
+export function shift(r: Rundown, g: Drag): Rundown {
+  const delta = dragDelta(g)
+  const list = acaraOf(r, g.d).map((a, j) => {
+    if (j !== g.i) return a
+    const from = mins(a.start), to = mins(a.end)
+    if (g.edge) return { ...a, end: clock(Math.min(1440, Math.max(from + STEP, to + delta))) }
+    const start = Math.max(0, Math.min(1440 - (to - from), from + delta))
+    return { ...a, start: clock(start), end: clock(start + (to - from)) }
+  })
+  return { ...r, acara: { ...r.acara, [g.d]: list } }
+}
+
+/** A drag rounded to the grid — what shift() actually applies. */
+export const dragDelta = (g: Drag) => Math.round(g.minutes / STEP) * STEP
+
+/**
+ * One acara patched: moving its start carries its length along, and its end can
+ * never land at or before its start. Without the first rule, setting Tumpengan
+ * to 20:40 left its end at 17:00 — an acara that cannot be saved or drawn.
+ */
+export function editAcara(a: Acara, patch: Partial<Acara>): Acara {
+  const next = { ...a, ...patch }
+  if (patch.start !== undefined && patch.end === undefined) {
+    const len = Math.max(STEP, mins(a.end) - mins(a.start))
+    next.end = clock(Math.min(1440, mins(next.start) + len))
+  }
+  if (mins(next.end) <= mins(next.start)) next.end = clock(mins(next.start) + STEP)
+  return next
+}
+
+/** Where a new acara starts: after the last one, else an hour before play. */
+export const nextAcaraStart = (r: Rundown, list: Acara[]) =>
+  list.length ? mins(list[list.length - 1].end) : snap(mins(r.start) - 60)
+
+if (import.meta.env.DEV) {
+  console.assert(snapTime('17:07') === '17:05' && snapTime('17:08') === '17:10',
+    '[rundown] times are not snapping to 5 minutes')
+  console.assert(snapTime('20:40') === '20:40', '[rundown] a 5-minute time was moved')
+  console.assert(snapTime('23:59') === '23:55', '[rundown] snap ran past midnight')
+  console.assert(PARTAI_MIN === 20, '[rundown] a partai is estimated at 20 minutes')
+  console.assert([1, 2].every(d => clock(playEnd(DEFAULT_RUNDOWN, d as Day)) === '21:20'),
+    '[rundown] default play should run 18:00-21:20', clock(playEnd(DEFAULT_RUNDOWN, 1)))
+  console.assert(
+    [1, 2].every(d => acaraOf(DEFAULT_RUNDOWN, d as Day).every(a =>
+      mins(a.start) % STEP === 0 && mins(a.end) % STEP === 0 && mins(a.end) > mins(a.start))),
+    '[rundown] a default acara is off the grid or ends before it starts')
+  console.assert(rundownOf({ teamNames: {} as never, players: [] }).start === '18:00',
+    '[rundown] a row without a rundown should fall back to the default')
+  console.assert(clock(25 * 60 + 30) === '01:30', '[rundown] a past-midnight label did not wrap')
+
+  console.assert(clock(nextAcaraStart(DEFAULT_RUNDOWN, [])) === '17:00',
+    '[rundown] the first acara of a day should sit an hour before play')
+  console.assert(
+    clock(nextAcaraStart(DEFAULT_RUNDOWN, [{ start: '15:00', end: '15:30', title: 'x' }])) === '15:30',
+    '[rundown] a new acara should follow the last one')
+
+  // The acara: nothing overlaps play, so the partai keep their own rhythm.
+  const plain = partaiTimes(DEFAULT_RUNDOWN, 1).map(clock)
+  console.assert(plain[0] === '18:00' && plain[1] === '18:20' && plain[9] === '21:00',
+    '[rundown] partai are not 20 minutes apart', plain)
+
+  // An acara running into play postpones it; one in the middle splits the day.
+  const late = { ...DEFAULT_RUNDOWN, acara: { 1: [{ start: '17:30', end: '18:30', title: 'Foto' }] } }
+  console.assert(clock(partaiTimes(late, 1)[0]) === '18:30' && clock(playEnd(late, 1)) === '21:50',
+    '[rundown] an overrunning acara did not postpone the partai', partaiTimes(late, 1).map(clock))
+
+  const mid = { ...DEFAULT_RUNDOWN, acara: { 1: [{ start: '19:00', end: '19:30', title: 'Break' }] } }
+  const split = partaiTimes(mid, 1).map(clock)
+  console.assert(split[2] === '18:40' && split[3] === '19:30' && clock(playEnd(mid, 1)) === '21:50',
+    '[rundown] a mid-session acara did not push the rest of the day', split)
+  console.assert(
+    partaiTimes(mid, 1).every((t, i) => i === 0 || t >= partaiTimes(mid, 1)[i - 1] + PARTAI_MIN),
+    '[rundown] partai overlap each other')
+
+  // Dragging: the block keeps its length and the partai follow it.
+  const moved = shift(DEFAULT_RUNDOWN, { d: 1, i: 0, minutes: 30, edge: false })
+  console.assert(acaraOf(moved, 1)[0].start === '18:00' && acaraOf(moved, 1)[0].end === '18:30',
+    '[rundown] a dragged acara changed length', acaraOf(moved, 1)[0])
+  console.assert(clock(partaiTimes(moved, 1)[0]) === '18:30',
+    '[rundown] the partai did not follow a dragged acara')
+  const grown = shift(DEFAULT_RUNDOWN, { d: 1, i: 0, minutes: 30, edge: true })
+  console.assert(acaraOf(grown, 1)[0].start === '17:30' && acaraOf(grown, 1)[0].end === '18:30',
+    '[rundown] the bottom edge should move only the end', acaraOf(grown, 1)[0])
+  console.assert(
+    acaraOf(shift(DEFAULT_RUNDOWN, { d: 1, i: 0, minutes: -120, edge: true }), 1)[0].end === '17:45',
+    '[rundown] an acara was dragged shorter than one step')
+  const lateNight = { ...DEFAULT_RUNDOWN, acara: { 1: [{ start: '23:00', end: '23:30', title: 'x' }] } }
+  console.assert(acaraOf(shift(lateNight, { d: 1, i: 0, minutes: 120, edge: false }), 1)[0].start === '23:30',
+    '[rundown] a drag ran off the end of the day',
+    acaraOf(shift(lateNight, { d: 1, i: 0, minutes: 120, edge: false }), 1)[0])
+
+  // A drag of more than half a step rounds up to one, less rounds to zero.
+  console.assert(dragDelta({ d: 1, i: 0, minutes: 8, edge: false }) === 10
+    && dragDelta({ d: 1, i: 0, minutes: 2, edge: false }) === 0,
+    '[rundown] a raw drag did not round to the step')
+
+  // Re-timing an acara keeps its length; an inverted one is impossible.
+  const tump = { start: '16:30', end: '17:00', title: 'Tumpengan' }
+  console.assert(editAcara(tump, { start: '20:40' }).end === '21:10',
+    '[rundown] moving an acara lost its length', editAcara(tump, { start: '20:40' }))
+  console.assert(editAcara(tump, { end: '16:00' }).end === '16:35',
+    '[rundown] an acara was allowed to end before it starts', editAcara(tump, { end: '16:00' }))
+  console.assert(editAcara(tump, { title: 'x' }).start === '16:30',
+    '[rundown] a rename moved the times')
+
+  // An admin's kickoff delays that partai and the ones after it.
+  const held = { ...DEFAULT_RUNDOWN, starts: { 1: { 3: '20:00' } } }
+  const ht = partaiTimes(held, 1).map(clock)
+  console.assert(ht[2] === '18:40' && ht[3] === '20:00' && ht[4] === '20:20',
+    '[rundown] a set kickoff did not delay its partai and the rest', ht)
+  console.assert(
+    clock(partaiTimes({ ...DEFAULT_RUNDOWN, starts: { 1: { 3: '17:00' } } }, 1)[3]) === '19:00',
+    '[rundown] a kickoff before the natural slot should be ignored')
+
+  // Overlapping acara share the width instead of hiding each other.
+  const solo = lanes([{ start: '17:00', end: '17:30', title: 'a' }, { start: '17:30', end: '18:00', title: 'b' }])
+  console.assert(solo.every(l => l.of === 1), '[rundown] touching acara should not share a lane', solo)
+  const pair = lanes([{ start: '17:00', end: '17:45', title: 'a' }, { start: '17:30', end: '18:00', title: 'b' }])
+  console.assert(pair[0].lane === 0 && pair[1].lane === 1 && pair.every(l => l.of === 2),
+    '[rundown] overlapping acara did not split', pair)
+  const trio = lanes([
+    { start: '17:00', end: '18:00', title: 'a' }, { start: '17:15', end: '17:30', title: 'b' },
+    { start: '17:45', end: '18:15', title: 'c' }, { start: '19:00', end: '19:30', title: 'd' },
+  ])
+  console.assert(trio.slice(0, 3).every(l => l.of === 3) && trio[3].of === 1 && trio[2].lane === 2,
+    '[rundown] a chained overlap group is wrong', trio)
+
+  // Chained acara: each pushes the next partai further, in one pass.
+  const chain = { ...DEFAULT_RUNDOWN, acara: { 1: [
+    { start: '18:00', end: '18:30', title: 'a' }, { start: '18:20', end: '19:00', title: 'b' },
+  ] } }
+  console.assert(clock(partaiTimes(chain, 1)[0]) === '19:00',
+    '[rundown] overlapping acara did not chain', clock(partaiTimes(chain, 1)[0]))
 }
