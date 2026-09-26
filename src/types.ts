@@ -123,8 +123,10 @@ export interface Drag { d: Day; i: number; minutes: number; edge: boolean }
 
 // No per-partai duration here: one partai is estimated at PARTAI_MIN minutes,
 // owned by the code so no saved row can hold a stale one.
+// The first partai is PLAY_START, owned by the code: a stored kickoff meant a row
+// saved weeks ago could pin the whole schedule to an old time. A late start on
+// the day is a kickoff set on partai 1 instead, which carries the rest with it.
 export interface Rundown {
-  start: string   // first partai of the day
   acara: Partial<Record<Day, Acara[]>>
   // Kickoff an admin set for one partai, keyed by day then partai index. It only
   // ever delays — the partai after it follow, so a match that runs long pushes

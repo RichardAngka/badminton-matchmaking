@@ -1514,7 +1514,7 @@ body::before {
   position: absolute; right: 6px; transform: translateY(-50%);
   font-family: 'JetBrains Mono', monospace; font-size: 10.5px; font-weight: 700; color: var(--dim);
 }
-.rd-day { flex: 1 1 0; min-width: 330px; }
+.rd-day { flex: 1 1 0; min-width: 0; }
 .rd-head {
   height: var(--rd-head); display: flex; flex-direction: column; justify-content: center; gap: 3px;
   padding: 0 8px; background: var(--surface); border: 1px solid var(--border);
@@ -1532,6 +1532,9 @@ body::before {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .rd-body {
+  /* Four lanes (2 matches x 2 lapangan) need room to stay readable, so the grid
+     scrolls sideways on a narrow phone rather than shrinking them to initials. */
+  min-width: 600px;
   position: relative; background: var(--surface);
   border: 1px solid var(--border); border-top: none;
   border-radius: 0 0 var(--radius-sm) var(--radius-sm);
@@ -1596,7 +1599,6 @@ body::before {
 }
 .rd-wait { font-size: 10.5px; color: var(--dim); font-style: italic; }
 @media (max-width: 480px) {
-  .rd-day { min-width: 300px; }
   .rd-names { font-size: 10px; }
 }
 

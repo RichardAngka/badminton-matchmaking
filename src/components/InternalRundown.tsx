@@ -6,7 +6,9 @@ import type {
 import {
   EMPTY_BRACKET, LEVEL_CLASS, PARTAI, SLOTS, STEP, WO,
   acaraOf, clock, isHere, lineupOf, loadTournament, mins, nextAcaraStart, partaiTimes,
-  COURTS, PARTAI_MIN, dragDelta, editAcara, lanes, partaiWinner, playEnd, ready, resolve,
+  COURTS, COURTS_PER_MATCH, PARTAI_MIN, PLAY_START, dragDelta, editAcara, lanes, partaiWinner,
+  playEnd,
+  ready, resolve,
   rundownOf, setPartai, shift, snapTime,
 } from '../internalMatch'
 import { TOURNAMENT_ID, supabase, upsertTournament } from '../supabase'
@@ -44,6 +46,7 @@ export function InternalRundown() {
   const [edit, setEdit] = useState(false)
   const [drag, setDrag] = useState<Drag | null>(null)
   const [form, setForm] = useState<Target | null>(null)   // double-clicked block
+  const [picked, setPicked] = useState<Day | null>(null)  // null = follow the bracket
   const [now, setNow] = useState(nowMin())
   const grabY = useRef(0)
 
@@ -83,6 +86,7 @@ export function InternalRundown() {
   const r = drag ? shift(saved, drag) : saved
   const b: Bracket = { ...EMPTY_BRACKET, ...state.bracket }
   const { pairs } = resolve(b)
+  // Both days, so the chips can show each one's finish time.
   // Each day's partai, already pushed past that day's acara.
   const times: Record<Day, number[]> = { 1: partaiTimes(r, 1), 2: partaiTimes(r, 2) }
   const ends: Record<Day, number> = { 1: playEnd(r, 1), 2: playEnd(r, 2) }
@@ -90,9 +94,12 @@ export function InternalRundown() {
   // The grid spans everything on it, so editing a time can never push an event
   // off the top or bottom. Measured from the saved times, not the dragged ones:
   // a grid that re-bounds mid-drag would slide out from under the cursor.
-  const all = DAYS.flatMap(d => acaraOf(saved, d))
-  const T0 = floorH(Math.min(mins(saved.start), ...all.map(a => mins(a.start))))
-  const T1 = ceilH(Math.max(...DAYS.map(d => playEnd(saved, d)), ...all.map(a => mins(a.end))))
+  // Day 2 is the day after the semis, so once both have a winner, open on it —
+  // the same rule as /internal/absen.
+  const day: Day = picked ?? (pairs.final.every(Boolean) ? 2 : 1)
+  const all = acaraOf(saved, day)
+  const T0 = floorH(Math.min(mins(PLAY_START), ...all.map(a => mins(a.start))))
+  const T1 = ceilH(Math.max(playEnd(saved, day), ...all.map(a => mins(a.end))))
   // ponytail: enough px/min that a 20-minute block fits its three lines, instead
   // of a second font scale for the tight case.
   const PX = 72 / PARTAI_MIN
@@ -187,7 +194,7 @@ export function InternalRundown() {
         <div className="ws-head-l">
           <h2>Jadwal</h2>
           <span className="ws-head-sub">
-            Perkiraan {PARTAI_MIN} menit per partai · acara menggeser jadwal partai
+            Partai mulai {PLAY_START} · {COURTS_PER_MATCH} lapangan per pertandingan · {PARTAI_MIN} menit per partai
           </span>
         </div>
         <span className="ws-pill">{clock(now)}</span>
@@ -206,17 +213,12 @@ export function InternalRundown() {
       {isAdmin && edit && (
         <div className="rd-edit">
           <div className="rd-edit-row">
-            <label className="rd-f">
-              <span>Mulai partai</span>
-              <TimeBox value={r.start} label="Mulai partai"
-                onCommit={t => saveRundown({ ...r, start: t })} />
-            </label>
             <span className="rd-edit-note">
               {PARTAI.length} x {PARTAI_MIN} menit · selesai hari 1 {clock(ends[1])} · hari 2 {clock(ends[2])}
             </span>
           </div>
 
-          {DAYS.map(d => (
+          {[day].map(d => (
             <div key={d} className="rd-edit-day">
               <div className="rd-edit-head">Acara hari {d}</div>
               {acaraOf(r, d).map((a, i) => (
@@ -240,6 +242,16 @@ export function InternalRundown() {
         </div>
       )}
 
+      <div className="im-segmented im-tabs" role="tablist" aria-label="Hari">
+        {DAYS.map(d => (
+          <button key={d} role="tab" aria-selected={day === d}
+            className={`im-seg${day === d ? ' on' : ''}`} onClick={() => setPicked(d)}>
+            <span className="im-tab-label">Hari {d}</span>
+            <span className="im-seg-count">{clock(ends[d])}</span>
+          </button>
+        ))}
+      </div>
+
       <div className="rd-grid">
         <div className="rd-gutter">
           <div className="rd-pad" />
@@ -250,8 +262,9 @@ export function InternalRundown() {
           </div>
         </div>
 
-        {DAYS.map(d => {
+        {[day].map(d => {
           const cols = KEYS[d].map(k => column(k, d))
+          const plan = lanes(times[d].map(t => ({ start: clock(t), end: clock(t + PARTAI_MIN), title: '' })))
           return (
             <div key={d} className="rd-day">
               <div className="rd-head">
@@ -271,6 +284,9 @@ export function InternalRundown() {
               </div>
 
               <div className="rd-body" style={{ height: y(T1) }}>
+                {/* Partai that run at the same time share their match's half of
+                    the column — one lane per lapangan. Reuses the acara lane
+                    layout, so a partai delayed on its own widens back out. */}
                 {lines.map(m => (
                   <div key={m} className={`rd-line${m % 60 ? ' q' : ''}`} style={{ top: y(m) }} />
                 ))}
@@ -303,11 +319,15 @@ export function InternalRundown() {
 
                 {cols.flatMap((c, j) => PARTAI.map((levels, p) => {
                   const from = times[d][p]
+                  const { lane, of } = plan[p]
                   const res = b.results?.[c.k]?.[p]
                   const won = partaiWinner(res)
                   return (
                     <div key={`${c.k}-${p}`} className="rd-ev match"
-                      style={{ top: y(from), height: PARTAI_MIN * PX, left: `${j * 50}%`, width: '50%' }}
+                      style={{
+                        top: y(from), height: PARTAI_MIN * PX,
+                        left: `${j * 50 + lane * (50 / of)}%`, width: `${50 / of}%`,
+                      }}
                       title={isAdmin ? 'Klik dua kali untuk ubah jam & lapangan' : undefined}
                       onDoubleClick={() => isAdmin && setForm({ kind: 'partai', d, p, k: c.k })}>
                       <div className="rd-ev-t">
