@@ -5,7 +5,8 @@ import type {
 } from '../types'
 import {
   COURTS, DAY, EMPTY_BRACKET, LEVELS, LEVEL_CLASS, MAX_POINT, OTHER, PARTAI, SLOTS, WO,
-  isHere, lineupOf, loadTournament, officials, partaiWinner, ready, resolve, setPartai, setSlot,
+  elapsed, isHere, lineupOf, loadTournament, officials, partaiWinner, ready, resolve, setPartai,
+  setSlot,
   tally,
 } from '../internalMatch'
 import { TOURNAMENT_ID, supabase, upsertTournament } from '../supabase'
@@ -233,6 +234,9 @@ export function InternalLineup() {
   )
 }
 
+/** How long a partai took, worded as the jadwal's Lapangan board words it. */
+const runLabel = (r?: PartaiResult) => !r?.started ? '–' : r.ended ? `${elapsed(r)} menit` : 'berjalan'
+
 /** The one-line summary under a partai: court, points, winner, wasit. */
 function metaLine(r: PartaiResult | undefined, state: TournamentState, sides: Side[], won?: 0 | 1) {
   const name = (id?: string) => state.players.find(p => p.id === id)?.name
@@ -240,6 +244,10 @@ function metaLine(r: PartaiResult | undefined, state: TournamentState, sides: Si
     `Lap ${r?.court ?? '–'}`,
     r?.score ? `${r.score[0]} – ${r.score[1]}` : 'belum ada poin',
   ]
+  // A running partai shows no number: this page has no clock tick, so a counter
+  // would sit frozen at the minute the page happened to render.
+  if (r?.ended) bits.push(`${elapsed(r)} menit`)
+  else if (r?.started) bits.push('▶ main')
   if (won !== undefined) bits.push(`✓ ${sides[won].name}`)
   bits.push(`W: ${name(r?.wasit) ?? '–'}`)
   return bits.join(' · ')
@@ -333,6 +341,7 @@ function PartaiPanel({ r, p, isAdmin, state, day, pair, clash, sides, onEdit }: 
     return (
       <dl className="lu-panel">
         <div><dt>Lapangan</dt><dd>{r?.court ?? '–'}</dd></div>
+        <div><dt>Waktu main</dt><dd>{runLabel(r)}</dd></div>
         <div><dt>Poin</dt><dd>{r?.score ? `${r.score[0]} – ${r.score[1]}` : '–'}</dd></div>
         <div><dt>Wasit</dt><dd>{name(r?.wasit)}</dd></div>
         <div><dt>Linesman</dt><dd>{[0, 1].map(i => name(lines[i])).join(' · ')}</dd></div>
@@ -372,6 +381,20 @@ function PartaiPanel({ r, p, isAdmin, state, day, pair, clash, sides, onEdit }: 
             <option value="">–</option>
             {COURTS.map(c => <option key={c} value={c}>Lapangan {c}</option>)}
           </select>
+        </dd>
+      </div>
+      <div>
+        <dt>Waktu main</dt>
+        <dd className="lu-points">
+          {r?.started && !r.ended
+            ? <button className="btn btn-primary btn-sm"
+                onClick={() => onEdit({ ended: Date.now() })}>Selesai</button>
+            : <button className="btn btn-ghost btn-sm" disabled={!r?.court}
+                title={r?.court ? undefined : 'Pilih lapangan dulu'}
+                onClick={() => onEdit({ started: Date.now(), ended: undefined })}>
+                {r?.ended ? 'Mulai ulang' : 'Mulai'}
+              </button>}
+          {r?.started && <span className="lu-dur">{runLabel(r)}</span>}
         </dd>
       </div>
       <div>

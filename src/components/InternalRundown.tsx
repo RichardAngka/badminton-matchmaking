@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type {
-  Acara, Bracket, BracketKey, Day, Drag, Rundown, Slot, TeamId, TourPlayer, TournamentState,
+  Acara, Bracket, BracketKey, Day, Drag, PartaiResult, Rundown, Slot, TeamId, TourPlayer,
+  TournamentState,
 } from '../types'
 import {
   EMPTY_BRACKET, LEVEL_CLASS, PARTAI, SLOTS, STEP, WO,
   acaraOf, clock, isHere, lineupOf, loadTournament, mins, nextAcaraStart, partaiTimes,
-  COURTS, COURTS_PER_MATCH, PARTAI_MIN, PLAY_START, dragDelta, editAcara, lanes, partaiWinner,
+  COURTS, COURTS_PER_MATCH, PARTAI_MIN, PLAY_START, defaultCourt, dragDelta, editAcara, elapsed,
+  lanes, lanesOf, minOfDay, partaiWinner,
   playEnd,
-  ready, resolve,
+  ready, resolve, runs,
   rundownOf, setPartai, shift, snapTime,
 } from '../internalMatch'
 import { TOURNAMENT_ID, supabase, upsertTournament } from '../supabase'
@@ -17,6 +19,8 @@ import { useCaptainTeam, useIsAdmin } from '../RoleContext'
 const DAYS: Day[] = [1, 2]
 const KEYS: Record<Day, [BracketKey, BracketKey]> = { 1: ['sf1', 'sf2'], 2: ['final', 'third'] }
 const LABEL: Record<BracketKey, string> = { sf1: 'SF 1', sf2: 'SF 2', final: 'Final', third: 'Juara 3' }
+// Which match a block belongs to, now that the column says the lapangan instead.
+const SHORT: Record<BracketKey, string> = { sf1: 'SF1', sf2: 'SF2', final: 'F', third: 'J3' }
 
 // A line every quarter hour is a reading aid; times snap to STEP (5 minutes).
 const LINE = 15
@@ -86,10 +90,15 @@ export function InternalRundown() {
   const r = drag ? shift(saved, drag) : saved
   const b: Bracket = { ...EMPTY_BRACKET, ...state.bracket }
   const { pairs } = resolve(b)
+  // What has actually been played, from the Lapangan board below. A partai that
+  // was started re-times the rest of its day off the real kickoff, and one that
+  // has finished hands the next giliran its courts at the real finish — so the
+  // jadwal follows the night instead of the estimate.
+  const live = { 1: runs(b, 1), 2: runs(b, 2) }
   // Both days, so the chips can show each one's finish time.
   // Each day's partai, already pushed past that day's acara.
-  const times: Record<Day, number[]> = { 1: partaiTimes(r, 1), 2: partaiTimes(r, 2) }
-  const ends: Record<Day, number> = { 1: playEnd(r, 1), 2: playEnd(r, 2) }
+  const times: Record<Day, number[]> = { 1: partaiTimes(r, 1, live[1]), 2: partaiTimes(r, 2, live[2]) }
+  const ends: Record<Day, number> = { 1: playEnd(r, 1, live[1]), 2: playEnd(r, 2, live[2]) }
 
   // The grid spans everything on it, so editing a time can never push an event
   // off the top or bottom. Measured from the saved times, not the dragged ones:
@@ -98,8 +107,10 @@ export function InternalRundown() {
   // the same rule as /internal/absen.
   const day: Day = picked ?? (pairs.final.every(Boolean) ? 2 : 1)
   const all = acaraOf(saved, day)
-  const T0 = floorH(Math.min(mins(PLAY_START), ...all.map(a => mins(a.start))))
-  const T1 = ceilH(Math.max(playEnd(saved, day), ...all.map(a => mins(a.end))))
+  const run = Object.values(live[day])
+  const nowMs = Date.now()   // re-read each `now` tick, so a running clock counts up
+  const T0 = floorH(Math.min(mins(PLAY_START), ...all.map(a => mins(a.start)), ...run.map(x => x.from)))
+  const T1 = ceilH(Math.max(playEnd(saved, day, live[day]), ...all.map(a => mins(a.end))))
   // ponytail: enough px/min that a 20-minute block fits its three lines, instead
   // of a second font scale for the tight case.
   const PX = 72 / PARTAI_MIN
@@ -132,6 +143,16 @@ export function InternalRundown() {
   // A match edit touches the rundown (its kickoff) and the bracket (its court),
   // so both go in one write. A null kickoff drops the override.
   const savePartai = (t: Extract<Target, { kind: 'partai' }>, start: string | null, court?: number) => {
+    const on = b.results?.[t.k]?.[t.p]
+    // A partai already on court is drawn from its real kickoff, so editing its
+    // time corrects that — the plan would have looked like it did nothing. Keeps
+    // the date it started on, so only the clock moves.
+    if (on?.started && start) {
+      const at = new Date(on.started)
+      at.setHours(mins(start) / 60 | 0, mins(start) % 60, 0, 0)
+      save({ ...state, bracket: setPartai(b, t.k, t.p, { court, started: at.getTime() }) })
+      return setForm(null)
+    }
     const day = { ...r.starts?.[t.d] }
     if (start === null) delete day[t.p]
     else day[t.p] = start
@@ -142,6 +163,12 @@ export function InternalRundown() {
     })
     setForm(null)
   }
+
+  // The Lapangan board: a partai is put on a court and timed there. Its real
+  // kickoff and finish live on the partai's own result next to its court, so one
+  // write moves the jadwal, the board and the line-up page together.
+  const runPartai = (k: BracketKey, p: number, patch: Partial<PartaiResult>) =>
+    save({ ...state, bracket: setPartai(b, k, p, patch) })
 
   // Drag an acara to move it, or its bottom edge to stretch it. Pointer events
   // cover mouse and touch in one path, and pointer capture means no
@@ -187,6 +214,55 @@ export function InternalRundown() {
     if (sides && !complete && !isAdmin) sides.forEach(s => { s.masked = captain !== s.team })
     return { k, sides, complete }
   }
+
+  const cols = KEYS[day].map(k => column(k, day))
+  // Every partai of the day that has two known teams, with what the board needs:
+  // `ok` means both sides have filled their two slots. Deliberately NOT tied to
+  // Absen — a pair standing on court that nobody ticked in yet still has to be
+  // startable; their names just show red. An unfilled partai stays listable too,
+  // so a late arrival can be sent on and the line-up fixed after.
+  const slotReady = (s: Side, p: number) => [0, 1].every(k => !!s.slots[p * 2 + k])
+  const items = cols.flatMap(c => c.sides
+    ? PARTAI.map((_, p) => ({
+      k: c.k, p, sides: c.sides!,
+      res: b.results?.[c.k]?.[p],
+      ok: c.sides!.every(s => slotReady(s, p)),
+    }))
+    : [])
+  // Only partai that have actually been sent on court, each in its lapangan's
+  // column. A planned partai has no real time and no court yet, so drawing all
+  // twenty on an estimate only buried the ones being played.
+  const blocks = cols.flatMap((c, j) => PARTAI.flatMap((levels, p) => {
+    const res = b.results?.[c.k]?.[p]
+    if (!res?.started) return []
+    const min = elapsed(res, nowMs)!
+    return [{
+      c, p, levels, res, min,
+      from: minOfDay(res.started),
+      // A finished partai is as tall as it really took. One still running keeps
+      // the estimate — growing it every minute would push it off the grid.
+      len: Math.max(STEP, res.ended ? min : PARTAI_MIN),
+      court: res.court ?? defaultCourt(j, p),
+    }]
+  }))
+  // Two partai on one lapangan at one time is a clash, not a layout: they share
+  // the column's width so both stay readable, the way two acara do.
+  const seat = new Map<string, { lane: number; of: number }>()
+  for (const ct of COURTS) {
+    const list = blocks.filter(x => x.court === ct).sort((a, z) => a.from - z.from)
+    lanesOf(list.map(x => [x.from, x.from + x.len]))
+      .forEach((l, i) => seat.set(`${list[i].c.k}-${list[i].p}`, l))
+  }
+
+  const tag = (x: typeof items[number]) =>
+    `${LABEL[x.k]} · P${x.p + 1} · ${x.sides.map(s => s.name).join(' vs ')}`
+  // Re-starting a finished partai is how a mistimed one is fixed, so it stays in
+  // the list — in its own group, because picking it overwrites its duration.
+  const groups: [string, typeof items][] = [
+    ['Line-up siap', items.filter(x => !x.res?.started && x.ok)],
+    ['Line-up belum diisi', items.filter(x => !x.res?.started && !x.ok)],
+    ['Sudah selesai · mulai ulang', items.filter(x => !!x.res?.ended)],
+  ]
 
   return (
     <section className="ws-section">
@@ -252,6 +328,52 @@ export function InternalRundown() {
         ))}
       </div>
 
+      {isAdmin && (
+        <div className="rd-courts">
+          {COURTS.map(c => {
+            const on = items.find(x => x.res?.court === c && x.res.started && !x.res.ended)
+            return (
+              <div key={c} className={`rd-court${on ? ' on' : ''}`}>
+                <div className="rd-court-h">
+                  <span className="rd-court-n">Lapangan {c}</span>
+                  {on && <span className="rd-court-t">{elapsed(on.res, nowMs)}′</span>}
+                </div>
+                {on ? (
+                  <>
+                    <div className="rd-court-m">{tag(on)}</div>
+                    <div className="rd-court-a">
+                      <button className="btn btn-primary btn-sm"
+                        onClick={() => runPartai(on.k, on.p, { ended: Date.now() })}>Selesai</button>
+                      <button className="icon-btn" title="Batalkan mulai"
+                        aria-label={`Batalkan mulai lapangan ${c}`}
+                        onClick={() => runPartai(on.k, on.p, { started: undefined, ended: undefined })}>×</button>
+                    </div>
+                  </>
+                ) : (
+                  /* Picking a partai puts it on this court and starts its clock
+                     in one write — the same two fields the jadwal reads. */
+                  <select className="lu-in" value="" aria-label={`Mulai partai di lapangan ${c}`}
+                    onChange={e => {
+                      if (!e.target.value) return
+                      const [k, p] = e.target.value.split(':')
+                      runPartai(k as BracketKey, Number(p), { court: c, started: Date.now(), ended: undefined })
+                    }}>
+                    <option value="">{items.length ? 'Pilih partai…' : 'Menunggu SF'}</option>
+                    {groups.map(([label, list]) => list.length ? (
+                      <optgroup key={label} label={label}>
+                        {list.map(x => (
+                          <option key={`${x.k}:${x.p}`} value={`${x.k}:${x.p}`}>{tag(x)}</option>
+                        ))}
+                      </optgroup>
+                    ) : null)}
+                  </select>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
       <div className="rd-grid">
         <div className="rd-gutter">
           <div className="rd-pad" />
@@ -263,8 +385,6 @@ export function InternalRundown() {
         </div>
 
         {[day].map(d => {
-          const cols = KEYS[d].map(k => column(k, d))
-          const plan = lanes(times[d].map(t => ({ start: clock(t), end: clock(t + PARTAI_MIN), title: '' })))
           return (
             <div key={d} className="rd-day">
               <div className="rd-head">
@@ -281,12 +401,17 @@ export function InternalRundown() {
                     </div>
                   ))}
                 </div>
+                {/* The columns below are lapangan, not matches: a partai sits in
+                    the court it is actually played on. */}
+                <div className="rd-head-lap">
+                  {COURTS.map(ct => <div key={ct} className="rd-head-l">Lapangan {ct}</div>)}
+                </div>
               </div>
 
               <div className="rd-body" style={{ height: y(T1) }}>
-                {/* Partai that run at the same time share their match's half of
-                    the column — one lane per lapangan. Reuses the acara lane
-                    layout, so a partai delayed on its own widens back out. */}
+                <div className="rd-lanes" aria-hidden>
+                  {COURTS.map(ct => <div key={ct} className="rd-lane" />)}
+                </div>
                 {lines.map(m => (
                   <div key={m} className={`rd-line${m % 60 ? ' q' : ''}`} style={{ top: y(m) }} />
                 ))}
@@ -317,27 +442,30 @@ export function InternalRundown() {
                   )
                 })}
 
-                {cols.flatMap((c, j) => PARTAI.map((levels, p) => {
-                  const from = times[d][p]
-                  const { lane, of } = plan[p]
-                  const res = b.results?.[c.k]?.[p]
+                {blocks.map(x => {
+                  const { c, p, res, from, min } = x
+                  const { lane, of } = seat.get(`${c.k}-${p}`)!
                   const won = partaiWinner(res)
+                  const W = 100 / COURTS.length
                   return (
-                    <div key={`${c.k}-${p}`} className="rd-ev match"
+                    <div key={`${c.k}-${p}`}
+                      className={`rd-ev match${res.ended ? ' done' : ' running'}`}
                       style={{
-                        top: y(from), height: PARTAI_MIN * PX,
-                        left: `${j * 50 + lane * (50 / of)}%`, width: `${50 / of}%`,
+                        top: y(from), height: x.len * PX,
+                        left: `${(x.court - 1) * W + lane * (W / of)}%`, width: `${W / of}%`,
                       }}
                       title={isAdmin ? 'Klik dua kali untuk ubah jam & lapangan' : undefined}
                       onDoubleClick={() => isAdmin && setForm({ kind: 'partai', d, p, k: c.k })}>
                       <div className="rd-ev-t">
+                        {/* The column is the lapangan now, so the block says which
+                            match it belongs to instead of which court. */}
+                        <span className="rd-m">{SHORT[c.k]}</span>
                         <span className="rd-p">P{p + 1}</span>
-                        {levels.map((l, i) => (
+                        {x.levels.map((l, i) => (
                           <span key={i} className={`lvl-badge ${LEVEL_CLASS[l]}`}>{l}</span>
                         ))}
                         <span className="rd-lap">
-                          {clock(from)}{res?.court ? ` · L${res.court}` : ''}
-                          {r.starts?.[d]?.[p] ? ' ⏱' : ''}
+                          {clock(from)} · {res.ended ? '' : '▶'}{min}′
                         </span>
                       </div>
                       {c.sides
@@ -345,13 +473,13 @@ export function InternalRundown() {
                           <div key={s.team}
                             className={`rd-side${won === i ? ' win' : won === undefined ? '' : ' lose'}`}>
                             <Names side={s} p={p} />
-                            {res?.score && <span className="rd-pt">{res.score[i]}</span>}
+                            {res.score && <span className="rd-pt">{res.score[i]}</span>}
                           </div>
                         ))
                         : <div className="rd-wait">Menunggu hasil semifinal</div>}
                     </div>
                   )
-                }))}
+                })}
               </div>
             </div>
           )
@@ -361,8 +489,11 @@ export function InternalRundown() {
       {form && (
         <JadwalForm
           target={form} r={r} label={form.kind === 'partai' ? LABEL[form.k] : ''}
-          natural={form.kind === 'partai' ? clock(times[form.d][form.p]) : ''}
+          natural={form.kind === 'partai'
+            ? clock(blocks.find(x => x.c.k === form.k && x.p === form.p)?.from ?? times[form.d][form.p])
+            : ''}
           court={form.kind === 'partai' ? b.results?.[form.k]?.[form.p]?.court : undefined}
+          live={form.kind === 'partai' && !!b.results?.[form.k]?.[form.p]?.started}
           onClose={() => setForm(null)}
           onSaveAcara={next => { saveRundown(next); setForm(null) }}
           onSavePartai={savePartai}
@@ -378,19 +509,23 @@ export function InternalRundown() {
  * keystroke would fight the Batal button. Times step in 5 minutes and are
  * snapped again on save, same as every other time on this page.
  */
-function JadwalForm({ target, r, label, natural, court, onClose, onSaveAcara, onSavePartai, onDelete }: {
+function JadwalForm({ target, r, label, natural, court, live, onClose, onSaveAcara, onSavePartai, onDelete }: {
   target: Target
   r: Rundown
   label: string
   natural: string
   court?: number
+  live?: boolean
   onClose: () => void
   onSaveAcara: (next: Rundown) => void
   onSavePartai: (t: Extract<Target, { kind: 'partai' }>, start: string | null, court?: number) => void
   onDelete?: () => void
 }) {
   const acara = target.kind === 'acara' ? acaraOf(r, target.d)[target.i] : undefined
-  const set = target.kind === 'partai' ? r.starts?.[target.d]?.[target.p] : undefined
+  // A partai on court opens on its real kickoff, not on a plan override that no
+  // longer draws anything — which also hides Reset jam, since there is no plan
+  // to reset. Undoing the start itself is the × on the Lapangan board.
+  const set = target.kind === 'partai' && !live ? r.starts?.[target.d]?.[target.p] : undefined
   const [draft, setDraft] = useState<Acara>(acara ?? { start: set ?? natural, end: natural, title: '' })
   const [lap, setLap] = useState(court ?? 0)
 
@@ -462,7 +597,9 @@ function JadwalForm({ target, r, label, natural, court, onClose, onSaveAcara, on
               {acara
                 ? bad ? 'Nama acara belum diisi.'
                   : 'Panjang acara ikut pindah · jam dibulatkan ke 5 menit · jam partai ikut bergeser'
-                : `${PARTAI_MIN} menit · tanpa penundaan mulai ${natural} · partai setelahnya ikut bergeser`}
+                : live
+                  ? `Jam mulai sebenarnya (${natural}) · ubah kalau tombol Mulai tertekan telat`
+                  : `${PARTAI_MIN} menit · tanpa penundaan mulai ${natural} · partai setelahnya ikut bergeser`}
             </span>
           </div>
         </div>

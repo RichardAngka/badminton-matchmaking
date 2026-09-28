@@ -555,6 +555,40 @@ export const rundownOf = (state: TournamentState): Rundown => ({ ...DEFAULT_RUND
 export const acaraOf = (r: Rundown, day: Day): Acara[] =>
   [...(r.acara[day] ?? [])].sort((a, b) => mins(a.start) - mins(b.start))
 
+/** Minutes since midnight of a timestamp, so epoch ms can sit on the grid. */
+export const minOfDay = (ms: number) => { const d = new Date(ms); return d.getHours() * 60 + d.getMinutes() }
+
+/** Minutes a partai has been on court: final once it stopped, live while it runs. */
+export const elapsed = (r?: PartaiResult, now = Date.now()) =>
+  r?.started ? Math.max(0, Math.floor(((r.ended ?? now) - r.started) / 60000)) : undefined
+
+/** What actually happened on court: `from` minutes-of-day, `to` once it stopped. */
+export interface Run { from: number; to?: number }
+
+/**
+ * Actual play per partai of a day, from the admin's Mulai / Selesai, merged
+ * across the day's two matches — they share the 4 lapangan, so the giliran is
+ * only over once both have stopped. `to` is `from` plus the elapsed minutes,
+ * never a clock reading, so a partai finishing after midnight still sorts after
+ * the one before it.
+ */
+export function runs(b: Bracket, day: Day): Record<number, Run> {
+  const keys = (Object.keys(DAY) as BracketKey[]).filter(k => DAY[k] === day)
+  const out: Record<number, Run> = {}
+  PARTAI.forEach((_, p) => {
+    const rs = keys.map(k => b.results?.[k]?.[p]).filter((r): r is PartaiResult => !!r?.started)
+    if (!rs.length) return
+    const from = Math.min(...rs.map(r => r.started!))
+    out[p] = {
+      from: minOfDay(from),
+      to: rs.every(r => r.ended)
+        ? minOfDay(from) + Math.round((Math.max(...rs.map(r => r.ended!)) - from) / 60000)
+        : undefined,
+    }
+  })
+  return out
+}
+
 /**
  * When each partai of a day starts. Acara win the timeline: a partai is pushed
  * past any it would overlap, so adding a ceremony — or stretching one — delays
@@ -564,20 +598,28 @@ export const acaraOf = (r: Rundown, day: Day): Acara[] =>
  * ponytail: rescans the acara per partai (4 x 10) rather than merging intervals
  * first; make it a merge pass if a day ever has dozens of acara.
  */
-export function partaiTimes(r: Rundown, day: Day): number[] {
+export function partaiTimes(r: Rundown, day: Day, live: Record<number, Run> = {}): number[] {
   const acara = acaraOf(r, day)   // sorted by start, so one pass per partai chains correctly
   const fixed = r.starts?.[day] ?? {}
   const out: number[] = []
   let t = mins(PLAY_START)
+  let free = t + PARTAI_MIN   // when the giliran on court now frees its lapangan
   for (let p = 0; p < PARTAI.length; p++) {
-    if (p && p % COURTS_PER_MATCH === 0) t += PARTAI_MIN   // next giliran
+    if (p && p % COURTS_PER_MATCH === 0) { t = free; free = t + PARTAI_MIN }   // next giliran
     let at = t
     const set = fixed[p]
     if (set) at = Math.max(at, mins(set))   // an admin's kickoff delays, never pulls earlier
     for (const a of acara) {
       if (mins(a.start) < at + PARTAI_MIN && mins(a.end) > at) at = mins(a.end)
     }
+    // A partai that has actually been started overrides every estimate: it began
+    // then, so the plan gets no vote, and the rest of the day re-times off it.
+    // ponytail: a partai still running counts as PARTAI_MIN until it stops, so
+    // the grid only ever grows on a real Selesai, never mid-match.
+    const run = live[p]
+    if (run) at = run.from
     out.push(at)
+    free = Math.max(free, run?.to ?? at + PARTAI_MIN)
     // A partai pushed past its giliran drags the giliran with it, so the ones
     // after it can't run on top of it.
     t = Math.max(t, at)
@@ -591,7 +633,16 @@ export function partaiTimes(r: Rundown, day: Day): number[] {
  * `list` must be sorted by start, as acaraOf() returns it.
  */
 export function lanes(list: Acara[]): { lane: number; of: number }[] {
-  const out = list.map(() => ({ lane: 0, of: 1 }))
+  return lanesOf(list.map(a => [mins(a.start), mins(a.end)]))
+}
+
+/**
+ * The same split over raw [start, end] minutes, for the partai blocks: their
+ * times run past midnight, and clock() would wrap 00:30 back to the top of the
+ * day and break the ordering this pass depends on.
+ */
+export function lanesOf(spans: [number, number][]): { lane: number; of: number }[] {
+  const out = spans.map(() => ({ lane: 0, of: 1 }))
   let group: number[] = []
   let groupEnd = -1
   const flush = () => {
@@ -599,19 +650,26 @@ export function lanes(list: Acara[]): { lane: number; of: number }[] {
     group = []
     groupEnd = -1
   }
-  list.forEach((a, i) => {
-    if (group.length && mins(a.start) >= groupEnd) flush()
+  spans.forEach(([from, to], i) => {
+    if (group.length && from >= groupEnd) flush()
     group.push(i)
-    groupEnd = Math.max(groupEnd, mins(a.end))
+    groupEnd = Math.max(groupEnd, to)
   })
   flush()
   return out
 }
 
-/** When the last partai of a day finishes. */
-export function playEnd(r: Rundown, day: Day): number {
-  const t = partaiTimes(r, day)
-  return t[t.length - 1] + PARTAI_MIN
+/**
+ * The lapangan a partai plays on before anyone assigns one: the day's first
+ * match takes 1-2, its second 3-4, so the two matches never share a court.
+ * `match` is 0 or 1 — the order the day's two matches are listed in.
+ */
+export const defaultCourt = (match: number, p: number) =>
+  match * COURTS_PER_MATCH + (p % COURTS_PER_MATCH) + 1
+
+/** When the last partai of a day finishes — actual length where one was timed. */
+export function playEnd(r: Rundown, day: Day, live: Record<number, Run> = {}): number {
+  return Math.max(...partaiTimes(r, day, live).map((at, p) => live[p]?.to ?? at + PARTAI_MIN))
 }
 
 /**
@@ -761,4 +819,35 @@ if (import.meta.env.DEV) {
   ] } }
   console.assert(clock(partaiTimes(chain, 1)[0]) === '20:00',
     '[rundown] overlapping acara did not chain', clock(partaiTimes(chain, 1)[0]))
+
+  // Timed on the night: the giliran after a partai starts when it really
+  // finished, not 30 minutes after the plan said it would.
+  const at = (h: number, m: number) => new Date(2026, 0, 1, h, m).getTime()
+  let timed = setPartai(EMPTY_BRACKET, 'sf1', 0, { started: at(19, 20), ended: at(20, 0) })
+  timed = setPartai(timed, 'sf2', 0, { started: at(19, 25), ended: at(19, 50) })
+  const rn = runs(timed, 1)
+  console.assert(rn[0].from === 19 * 60 + 20 && rn[0].to === 20 * 60,
+    '[jadwal] a timed partai did not report the window it really used', rn[0])
+  console.assert(elapsed({ started: at(19, 20), ended: at(20, 0) }) === 40,
+    '[jadwal] a partai duration is wrong')
+  const real = partaiTimes(DEFAULT_RUNDOWN, 1, rn).map(clock)
+  console.assert(real[0] === '19:20' && real[2] === '20:00',
+    '[jadwal] the next giliran did not wait for the real finish', real)
+  // Still on court: the estimate holds until Selesai, so the grid never creeps.
+  const going = runs(setPartai(EMPTY_BRACKET, 'sf1', 0, { started: at(19, 20) }), 1)
+  console.assert(going[0].to === undefined
+    && clock(partaiTimes(DEFAULT_RUNDOWN, 1, going)[2]) === '19:50',
+    '[jadwal] a running partai should hold its estimate')
+  console.assert(runs(EMPTY_BRACKET, 1)[0] === undefined && elapsed(undefined) === undefined,
+    '[jadwal] an untimed partai should report nothing')
+
+  // One giliran fills all four lapangan: both matches, both of their partai.
+  console.assert(
+    [0, 1].flatMap(m => [0, 1].map(p => defaultCourt(m, p))).sort().join() === COURTS.join(),
+    '[jadwal] a giliran does not cover lapangan 1-4 exactly once')
+  console.assert(defaultCourt(0, 8) === 1 && defaultCourt(1, 9) === 4,
+    '[jadwal] the later giliran left its lapangan')
+  const sp = lanesOf([[1400, 1440], [1430, 1460], [1500, 1530]])
+  console.assert(sp[0].of === 2 && sp[1].lane === 1 && sp[2].of === 1,
+    '[jadwal] raw-minute lanes did not split an overlap', sp)
 }

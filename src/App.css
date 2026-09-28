@@ -1507,7 +1507,7 @@ body::before {
    Google-Calendar layout: an hour gutter plus one column per day, events
    absolutely positioned by clock time. Both days always show, so the grid
    scrolls sideways on a phone rather than squeezing four match columns. */
-.rd-grid { --rd-head: 56px; display: flex; gap: 10px; overflow-x: auto; padding-bottom: 8px; }
+.rd-grid { --rd-head: 74px; display: flex; gap: 10px; overflow-x: auto; padding-bottom: 8px; }
 .rd-gutter { flex: 0 0 40px; }
 .rd-pad { height: var(--rd-head); }
 .rd-hour {
@@ -1525,6 +1525,18 @@ body::before {
   font-family: 'JetBrains Mono', monospace; font-size: 10.5px; font-weight: 700; color: var(--dim);
 }
 .rd-head-cols { display: flex; }
+/* The body's columns are lapangan 1-4, so the head names them and the body
+   draws their dividers. A partai sits in the court it is played on. */
+.rd-head-lap { display: flex; margin: 0 -8px -1px; border-top: 1px solid var(--border); }
+.rd-head-l {
+  flex: 1 1 0; min-width: 0; padding: 3px 6px; border-left: 1px solid var(--border);
+  font-size: 9.5px; font-weight: 800; color: var(--dim); text-transform: uppercase;
+  letter-spacing: .04em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.rd-head-l:first-child { border-left: none; }
+.rd-lanes { position: absolute; inset: 0; display: flex; pointer-events: none; }
+.rd-lane { flex: 1 1 0; border-left: 1px solid var(--border); }
+.rd-lane:first-child { border-left: none; }
 .rd-head-col { flex: 1 1 0; min-width: 0; display: flex; align-items: baseline; gap: 5px; }
 .rd-head-k { font-size: 11px; font-weight: 800; color: var(--text); flex-shrink: 0; }
 .rd-head-v {
@@ -1580,6 +1592,7 @@ body::before {
 .rd-p {
   font-family: 'JetBrains Mono', monospace; font-size: 10.5px; font-weight: 800; color: var(--gold);
 }
+.rd-m { flex-shrink: 0; font-size: 9px; font-weight: 800; color: var(--teal); }
 .rd-lap {
   margin-left: auto; flex-shrink: 0;
   font-family: 'JetBrains Mono', monospace; font-size: 9.5px; font-weight: 700; color: var(--muted);
@@ -1620,4 +1633,65 @@ body::before {
 @media (max-width: 480px) {
   .rd-edit-row .rd-t { flex: 1 1 88px; }
   .rd-edit-note { margin-left: 0; }
+}
+
+/* Lapangan board (admin): the four courts as they stand right now. Sending a
+   partai onto one starts its clock, so the grid above re-times itself off what
+   actually happened instead of the estimate. */
+.rd-courts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
+.rd-court {
+  display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 8px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
+}
+.rd-court.on { background: #10251b; border-color: var(--green-dim); }
+.rd-court-h { display: flex; align-items: baseline; gap: 6px; }
+.rd-court-n { font-size: 11.5px; font-weight: 800; color: var(--gold); }
+.rd-court-t {
+  margin-left: auto; font-family: 'JetBrains Mono', monospace;
+  font-size: 12px; font-weight: 800; color: var(--green);
+}
+.rd-court-m {
+  font-size: 11px; font-weight: 600; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis;
+}
+.rd-court-a { display: flex; align-items: center; gap: 6px; margin-top: auto; }
+@media (max-width: 720px) { .rd-courts { grid-template-columns: repeat(2, 1fr); } }
+
+/* A partai on court now, and one whose time has been taken. */
+.rd-ev.match.running { border-color: var(--green); border-left-color: var(--green); }
+.rd-ev.match.done { border-left-color: var(--dim); opacity: .9; }
+.lu-dur {
+  align-self: center; font-family: 'JetBrains Mono', monospace;
+  font-size: 11.5px; font-weight: 700; color: var(--green);
+}
+
+/* Live lapangan, one row each (/internal/tournament). What is on court now, or
+   the last partai that court held — fed by Mulai / Selesai on /internal/jadwal. */
+.br-courts {
+  display: flex; flex-direction: column; gap: 1px; margin-bottom: 14px;
+  background: var(--border); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.br-court {
+  display: flex; align-items: center; gap: 10px; padding: 7px 10px;
+  background: var(--surface); opacity: .65;
+}
+.br-court.on { background: #10251b; opacity: 1; }
+.br-court-n { flex: 0 0 82px; font-size: 11.5px; font-weight: 800; color: var(--gold); }
+.br-court-m {
+  flex: 0 0 auto; font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; font-weight: 700; color: var(--muted);
+}
+.br-court-t {
+  flex: 1; min-width: 0; font-size: 12.5px; font-weight: 600; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.br-court-d {
+  flex: 0 0 auto; font-family: 'JetBrains Mono', monospace;
+  font-size: 11.5px; font-weight: 800; color: var(--green);
+}
+@media (max-width: 480px) {
+  .br-court { flex-wrap: wrap; gap: 4px 8px; }
+  .br-court-n { flex: 0 0 auto; }
+  .br-court-t { flex: 1 1 100%; }
 }

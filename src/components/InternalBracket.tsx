@@ -1,16 +1,20 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { Bracket, BracketKey, Score, TeamId } from '../types'
-import { EMPTY_BRACKET, PARTAI, loadTournament, resolve, semis, setTiebreak, tally } from '../internalMatch'
+import {
+  COURTS, DAY, EMPTY_BRACKET, PARTAI, elapsed, loadTournament, resolve, semis, setTiebreak, tally,
+} from '../internalMatch'
 import { TOURNAMENT_ID, supabase, upsertTournament } from '../supabase'
 import { useIsAdmin } from '../RoleContext'
 
 const DRAWS: Bracket['draw'][] = [2, 3, 4]
 const PLACES = ['Juara', 'Runner-up', '2nd Runner-up']
+const LABEL: Record<BracketKey, string> = { sf1: 'SF 1', sf2: 'SF 2', final: 'Final', third: 'Juara 3' }
 
 export function InternalBracket() {
   const isAdmin = useIsAdmin()
   const qc = useQueryClient()
+  const [, tick] = useState(0)   // the running clock below, once a minute
 
   const { data: state } = useQuery({
     queryKey: ['tournament'],
@@ -19,6 +23,12 @@ export function InternalBracket() {
   })
 
   const mut = useMutation({ mutationFn: upsertTournament })
+
+  // Once a minute, so a court's running clock counts up without a reload.
+  useEffect(() => {
+    const id = setInterval(() => tick(n => n + 1), 60_000)
+    return () => clearInterval(id)
+  }, [])
 
   // Realtime, same as /internal/player: results show up on every open phone
   // the moment the admin enters a score.
@@ -58,6 +68,17 @@ export function InternalBracket() {
     save({ draw, partai: {}, tiebreak: {}, results: {} })
   }
 
+  // One row per lapangan: what is on court now, or the last partai it held.
+  // Read-only — the Mulai / Selesai buttons on /internal/jadwal write these two
+  // fields, this is the same data facing everyone watching.
+  const timed = (Object.keys(DAY) as BracketKey[]).flatMap(k =>
+    (b.results?.[k] ?? []).map((res, p) => ({ k, p, res })).filter(x => x.res?.started))
+  const rows = COURTS.map(ct => {
+    const here = timed.filter(x => x.res.court === ct)
+    const on = here.find(x => !x.res.ended)
+    return { ct, on: !!on, x: on ?? here.sort((a, z) => z.res.ended! - a.res.ended!)[0] }
+  })
+
   const card = (k: BracketKey, label: string, tbd: string[] = []) => (
     <MatchCard
       label={label}
@@ -94,6 +115,27 @@ export function InternalBracket() {
               </button>
             )
           })}
+        </div>
+      )}
+
+      {rows.some(r => r.x) && (
+        <div className="br-courts">
+          {rows.map(({ ct, on, x }) => (
+            <div key={ct} className={`br-court${on ? ' on' : ''}`}>
+              <span className="br-court-n">Lapangan {ct}</span>
+              {x ? (
+                <>
+                  <span className="br-court-m">{LABEL[x.k]} · P{x.p + 1}</span>
+                  <span className="br-court-t">
+                    {pairs[x.k].map(t => (t ? name(t) : '–')).join('  vs  ')}
+                  </span>
+                  <span className="br-court-d">
+                    {on ? `▶ ${elapsed(x.res)}′` : `${elapsed(x.res)} menit`}
+                  </span>
+                </>
+              ) : <span className="br-court-m">Kosong</span>}
+            </div>
+          ))}
         </div>
       )}
 

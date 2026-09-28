@@ -90,6 +90,11 @@ export interface PartaiResult {
   score?: Score     // points, 0–42 each — the higher one wins the partai
   wasit?: string    // player id, from a team not playing this match
   lines?: string[]  // up to 2 linesman player ids, same teams as the wasit
+  // Actual play, set by the admin's Mulai / Selesai on /internal/jadwal. Epoch
+  // ms, not "HH:MM": what is tracked is the duration, and a partai running past
+  // midnight must not subtract to a negative one.
+  started?: number
+  ended?: number
 }
 
 export interface Bracket {
