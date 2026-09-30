@@ -1398,58 +1398,202 @@ body::before {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
-/* ── Line-up (/internal/lineup) ──────────────────────────────────────────── */
-.lu-wrap {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius); overflow: hidden;
+/* ── Line-up (/internal/lineup) ───────────────────────────────────────────────
+   Two shapes, because there are two jobs. A captain naming twenty grade-locked
+   players gets .lu-fill: their own slots and nothing else, since the opponent's
+   column and the points are not theirs to touch yet. The meja — and everyone
+   once both teams are in — gets .lu-sheet: one card per partai, the two sides
+   split by the net, each side's points on its own side of it, so a 21 cannot be
+   typed into the wrong team. A partai's border borrows the jadwal's language:
+   dashed while it is only a plan, green on court, quiet once the points stand. */
+
+/* Tie score and what each side still needs, answerable from partai 10 as well
+   as partai 1. Sits under the sticky topbar (70px, 62px on a phone). */
+.lu-bar {
+  position: sticky; top: 70px; z-index: 20;
+  display: grid; grid-template-columns: minmax(0,1fr) auto minmax(0,1fr);
+  align-items: center; gap: 14px;
+  margin-bottom: 14px; padding: 11px 16px;
+  background: rgba(19,19,19,.94);
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+  border: 1px solid var(--border-s); border-radius: var(--radius);
 }
-.lu { width: 100%; table-layout: fixed; border-collapse: collapse; }
-.lu-c0 { width: 76px; }
-.lu thead th {
-  padding: 9px 8px; background: var(--gold); color: #0A0800;
-  font-size: 13.5px; font-weight: 800; text-align: left;
+.lu-bar-s { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.lu-bar-s.b { text-align: right; }
+.lu-bar-team {
+  font-size: 15px; font-weight: 700; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.lu thead th:first-child { background: var(--card-lo); }
-.lu-team { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.lu-count {
-  font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 800;
-  color: rgba(10,8,0,.62);
+.lu-bar-state { font-size: 12px; font-weight: 600; color: var(--red); }
+.lu-bar-state.ok { color: var(--green); }
+.lu-bar-net { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; }
+.lu-bar-sc {
+  font-size: 28px; font-weight: 700; line-height: 1; color: var(--text);
+  font-variant-numeric: tabular-nums; text-align: center;
 }
-.lu-count.ok { color: #0A5C36; }
-.lu tbody tr { border-top: 1px solid var(--border); }
-.lu tbody tr:nth-child(even) { background: var(--card-lo); }
-.lu tbody th, .lu td { padding: 5px 8px; vertical-align: top; text-align: left; }
-.lu td + td { border-left: 1px solid var(--border); }
-/* One line per player; the level column uses the same height so each line
-   reads straight across: level → name → name. */
-.lu-line { display: flex; align-items: center; gap: 6px; height: 32px; min-width: 0; }
-.lu-num {
-  width: 20px; flex-shrink: 0; color: var(--dim);
-  font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 800;
+.lu-bar-rule { width: 2px; height: 26px; background: var(--border-s); border-radius: 1px; }
+.lu-bar-unit {
+  grid-column: 1 / -1; text-align: center;
+  font-size: 10.5px; font-weight: 600; color: var(--dim);
 }
+
+.lu-locked {
+  padding: 16px; max-width: 62ch;
+  border: 1px dashed var(--border-s); border-radius: var(--radius);
+  font-size: 13px; line-height: 1.55; color: var(--muted);
+}
+
+/* One slot: the grade it is for, who fills it, and anything wrong with that.
+   Each fact appears once, so nothing has to be read out of a truncated option
+   label. 44px because it is tapped twenty times, one-handed, courtside. */
+.lu-row { display: flex; align-items: center; gap: 8px; min-height: 44px; min-width: 0; }
+.lu-row > .lvl-badge { min-width: 40px; justify-content: center; }
 .lu-name {
-  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font-size: 13px; font-weight: 600; color: var(--text);
+  flex: 1; min-width: 0; font-size: 15px; font-weight: 500; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.lu-name.wo { color: var(--dim); font-style: italic; }
-.lu-sub {
-  flex-shrink: 0; color: #FFB020;
-  font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 800;
+.lu-name.wo { color: var(--dim); }
+.lu-hid { flex: 1; min-width: 0; font-size: 12.5px; font-weight: 500; color: var(--dim); }
+.lu-sel {
+  flex: 1; min-width: 0; height: 40px; padding: 0 8px;
+  background: var(--card); border: 1px solid var(--border-s); border-radius: var(--radius-sm);
+  color: var(--text); font: inherit; font-size: 15px; font-weight: 500;
 }
-.lu-pick {
-  flex: 1; min-width: 0; height: 30px; padding: 0 4px;
-  background: var(--card); border: 1px solid var(--border-s); border-radius: var(--radius-xs);
-  color: var(--text); font: inherit; font-size: 12.5px; font-weight: 600;
+.lu-sel.empty { border-style: dashed; color: var(--dim); }
+/* Picked but not checked in — the one thing that holds a lineup back. */
+.lu-sel.away { border-color: var(--red); }
+.lu-sel:focus-visible { outline: 2px solid var(--gold-dim); outline-offset: 1px; }
+.lu-chip {
+  display: inline-flex; align-items: center; flex-shrink: 0;
+  padding: 3px 7px; border-radius: var(--radius-xs);
+  font-size: 11px; font-weight: 700; white-space: nowrap;
 }
-.lu-pick.empty { border-style: dashed; color: var(--dim); }
-.lu-pick:focus-visible { outline: 2px solid var(--gold-dim); outline-offset: 1px; }
+.lu-chip.grade { background: #2A1500; color: #FFB020; border: 1px solid rgba(255,176,32,.4); }
+.lu-chip.away { background: rgba(255,61,90,.12); color: var(--red); border: 1px solid rgba(255,61,90,.4); }
+/* Admin only: the chip that reports the no-show is the one that checks them in,
+   and it previews the result — red now, green under the finger. */
+.lu-chip.act {
+  min-height: 32px; padding: 0 10px; cursor: pointer; font-family: inherit;
+  transition: background .12s ease, border-color .12s ease, color .12s ease;
+}
+.lu-chip.away.act:hover, .lu-chip.away.act:focus-visible {
+  background: rgba(0,200,118,.14); border-color: rgba(0,200,118,.5); color: var(--green);
+}
+.lu-chip.act:focus-visible { outline: 2px solid var(--gold-dim); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .lu-chip.act { transition: none; } }
+
+/* ── Fill mode: a captain's own twenty ── */
+.lu-fill { list-style: none; display: flex; flex-direction: column; }
+.lu-fill-p {
+  display: grid; gap: 2px; padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.lu-fill-p:last-child { border-bottom: none; }
+.lu-fill-n { font-size: 12.5px; font-weight: 700; color: var(--dim); }
+.lu-fill-rows { display: grid; gap: 4px; min-width: 0; }
+@media (min-width: 560px) {
+  .lu-fill-p { grid-template-columns: 74px minmax(0, 1fr); align-items: start; gap: 12px; }
+  .lu-fill-n { padding-top: 15px; }
+}
+@media (min-width: 720px) { .lu-fill-rows { grid-template-columns: 1fr 1fr; gap: 14px; } }
+
+/* ── Sheet mode: one card per partai ── */
+.lu-sheet { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.lu-p {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 10px 14px 12px;
+}
+.lu-p.unset { border-style: dashed; border-color: var(--border-s); }
+.lu-p.live { border-color: rgba(0,200,118,.45); }
+.lu-p-h {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  padding-bottom: 8px; border-bottom: 1px solid var(--border);
+}
+.lu-p-n { font-size: 13px; font-weight: 700; color: var(--text); }
+.lu-p-when { font-size: 12px; font-weight: 600; color: var(--dim); }
+.lu-p.live .lu-p-when { color: var(--green); }
+.lu-p-lap { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--muted); }
+.lu-p-act { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.lu-p-act .lu-in { width: 148px; }
+/* .lu-in is shared with the jadwal board, so the taller target is scoped here. */
+.lu-p .lu-in, .lu-crew .lu-in { height: 40px; font-size: 13.5px; }
+
+.lu-p-body { display: grid; gap: 4px; padding-top: 8px; }
+/* The net. A green one is the only thing on this page that announces itself,
+   and it only does so while a partai is actually on court. */
+.lu-net { height: 2px; margin: 6px 0; background: rgba(193,198,215,.32); border-radius: 1px; }
+.lu-p.live .lu-net { background: var(--green); }
+@media (min-width: 720px) {
+  .lu-p-body { grid-template-columns: minmax(0,1fr) auto minmax(0,1fr); gap: 18px; align-items: start; }
+  .lu-net { width: 2px; height: auto; align-self: stretch; margin: 0; }
+}
+
+/* Negative side margins so the won field bleeds outward without moving a name:
+   the tint widens, the column does not. */
+.lu-side { min-width: 0; margin: 0 -10px; padding: 5px 10px; border-radius: var(--radius-sm); }
+/* A won partai is a field; a live one is an edge (the net, the card border).
+   Area against line, so a partai being played and a partai already decided stay
+   apart even while an admin is typing the points that settle it. */
+.lu-side.won { background: rgba(0, 200, 118, .10); }
+.lu-side-h { display: flex; align-items: center; gap: 8px; min-height: 34px; }
+.lu-side-team {
+  flex: 1; min-width: 0; font-size: 12.5px; font-weight: 700; color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.lu-side-won { flex-shrink: 0; font-size: 11px; font-weight: 700; color: var(--green); }
+.lu-side-pt {
+  flex-shrink: 0; min-width: 44px; text-align: right;
+  font-size: 22px; font-weight: 700; line-height: 1; color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.lu-side.lost .lu-side-pt { color: var(--dim); }
+.lu-pt {
+  flex-shrink: 0; width: 58px; height: 40px; padding: 0 4px; text-align: center;
+  background: var(--card); border: 1px solid var(--border-s); border-radius: var(--radius-sm);
+  color: var(--text); font: inherit; font-size: 20px; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.lu-pt::placeholder { color: var(--dim); font-weight: 500; }
+.lu-pt:focus-visible { outline: 2px solid var(--gold-dim); outline-offset: 1px; }
+/* Side B mirrors only its header, so both scores sit against the net while the
+   names still read left-to-right in both columns. */
+@media (min-width: 720px) {
+  .lu-side.b .lu-side-h { flex-direction: row-reverse; }
+  .lu-side.b .lu-side-team { text-align: right; }
+  .lu-side.b .lu-side-pt { text-align: left; }
+}
+
+.lu-crew { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border); }
+.lu-crew-s {
+  display: flex; align-items: center; gap: 6px; min-height: 30px;
+  list-style: none; cursor: pointer;
+  font-size: 12px; font-weight: 600; color: var(--dim);
+}
+.lu-crew-s::-webkit-details-marker { display: none; }
+.lu-crew-s::after { content: '▾'; }
+.lu-crew[open] .lu-crew-s::after { content: '▴'; }
+.lu-crew-s:hover { color: var(--text); }
+.lu-crew-s:focus-visible {
+  outline: 2px solid var(--gold-dim); outline-offset: 2px; border-radius: var(--radius-xs);
+}
+.lu-crew-b { display: grid; gap: 10px; padding: 8px 0 2px; }
+@media (min-width: 560px) { .lu-crew-b { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.lu-crew-f { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.lu-crew-f > span { font-size: 11.5px; font-weight: 600; color: var(--dim); }
+.lu-crew-f > strong {
+  font-size: 13.5px; font-weight: 600; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+@media (max-width: 880px) { .lu-bar { top: 62px; } }
 @media (max-width: 480px) {
-  .lu-c0 { width: 70px; }
-  .lu-num { width: 16px; }
-  .lu tbody th, .lu td { padding: 5px 5px; }
+  .lu-bar { padding: 9px 12px; gap: 10px; }
+  .lu-bar-team { font-size: 13.5px; }
+  .lu-bar-sc { font-size: 24px; }
+  .lu-p { padding: 9px 11px 11px; }
+  .lu-p-act { width: 100%; }
+  .lu-p-act .lu-in { flex: 1; width: auto; }
 }
-/* A picked player not checked in for the day — holds the lineup back. */
-.lu-pick.away { border-color: var(--red); color: var(--red); }
 
 /* ── Absen (/internal/absen) ─────────────────────────────────────────────── */
 .ab-row {
@@ -1465,34 +1609,6 @@ body::before {
   border: 1.5px solid var(--border-s); color: #0A0800; font-size: 13px; font-weight: 900;
 }
 .ab-row.on .ab-check { background: var(--green); border-color: var(--green); }
-
-/* Line-up: winner marks, partai meta line and the per-partai panel. */
-.lu td.win { background: rgba(0,200,118,.08); }
-.lu td.lose .lu-name { color: var(--dim); }
-.lu-win { flex-shrink: 0; color: var(--green); font-weight: 900; font-size: 12px; }
-.lu-head-n { display: flex; align-items: center; gap: 6px; }
-.lu-score {
-  font-family: 'JetBrains Mono', monospace; font-size: 15px; font-weight: 800; color: #0A0800;
-}
-.lu-name.hid { color: var(--dim); }
-.lu-meta-row td { padding: 0 8px 6px; }
-.lu-meta {
-  display: flex; align-items: center; gap: 6px; width: 100%;
-  background: none; border: none; padding: 2px 0; cursor: pointer;
-  color: var(--dim); font: inherit; font-size: 11.5px; font-weight: 600; text-align: left;
-}
-.lu-meta:hover { color: var(--text); }
-.lu-meta:focus-visible { outline: 2px solid var(--gold-dim); outline-offset: 2px; }
-.lu-meta-txt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.lu-meta-caret { flex-shrink: 0; }
-.lu-panel-row td { padding: 0 8px 10px; }
-.lu-panel { display: flex; flex-direction: column; gap: 8px;
-  background: var(--card-lo); border: 1px solid var(--border); border-radius: var(--radius-sm);
-  padding: 10px; }
-.lu-panel > div { display: flex; align-items: center; gap: 8px; }
-.lu-panel dt { flex: 0 0 72px; font-size: 11.5px; font-weight: 700; color: var(--dim); }
-.lu-panel dd { flex: 1; min-width: 0; font-size: 13px; font-weight: 600; color: var(--text); }
-.lu-points { display: flex; gap: 6px; }
 .lu-in {
   width: 100%; min-width: 0; height: 32px; padding: 0 6px;
   background: var(--card); border: 1px solid var(--border-s); border-radius: var(--radius-xs);
@@ -1500,7 +1616,6 @@ body::before {
 }
 .lu-in.away { border-color: var(--red); color: var(--red); }
 .lu-in:focus-visible { outline: 2px solid var(--gold-dim); outline-offset: 1px; }
-.lu-point { text-align: center; font-family: 'JetBrains Mono', monospace; font-size: 14px; }
 .btn.on { border-color: var(--gold-dim); color: var(--gold); }
 
 /* ── Jadwal / rundown (/internal/jadwal) ─────────────────────────────────────
@@ -1657,9 +1772,12 @@ body::before {
 .rd-court-a { display: flex; align-items: center; gap: 6px; margin-top: auto; }
 @media (max-width: 720px) { .rd-courts { grid-template-columns: repeat(2, 1fr); } }
 
-/* A partai on court now, and one whose time has been taken. */
+/* A partai on court now, one whose time has been taken, and one only assigned
+   a lapangan so far — dashed, because it is a plan, not a record. */
 .rd-ev.match.running { border-color: var(--green); border-left-color: var(--green); }
 .rd-ev.match.done { border-left-color: var(--dim); opacity: .9; }
+.rd-ev.match.plan { border-style: dashed; border-left-style: solid; opacity: .7; }
+.rd-court.next { border-color: var(--gold-dim); }
 .lu-dur {
   align-self: center; font-family: 'JetBrains Mono', monospace;
   font-size: 11.5px; font-weight: 700; color: var(--green);

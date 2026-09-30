@@ -229,19 +229,20 @@ export function InternalRundown() {
       ok: c.sides!.every(s => slotReady(s, p)),
     }))
     : [])
-  // Only partai that have actually been sent on court, each in its lapangan's
-  // column. A planned partai has no real time and no court yet, so drawing all
-  // twenty on an estimate only buried the ones being played.
+  // Only partai someone has actually put somewhere: given a lapangan (on this
+  // page or on Line-up), or already started. One with neither is still a guess,
+  // and drawing all twenty of those buried the ones being played.
   const blocks = cols.flatMap((c, j) => PARTAI.flatMap((levels, p) => {
     const res = b.results?.[c.k]?.[p]
-    if (!res?.started) return []
-    const min = elapsed(res, nowMs)!
+    if (!res || (!res.started && !res.court)) return []
+    const min = elapsed(res, nowMs)
     return [{
       c, p, levels, res, min,
-      from: minOfDay(res.started),
+      // Its real kickoff once it has one, else where the plan puts it.
+      from: res.started ? minOfDay(res.started) : times[day][p],
       // A finished partai is as tall as it really took. One still running keeps
       // the estimate — growing it every minute would push it off the grid.
-      len: Math.max(STEP, res.ended ? min : PARTAI_MIN),
+      len: Math.max(STEP, res.ended && min ? min : PARTAI_MIN),
       court: res.court ?? defaultCourt(j, p),
     }]
   }))
@@ -332,21 +333,31 @@ export function InternalRundown() {
         <div className="rd-courts">
           {COURTS.map(c => {
             const on = items.find(x => x.res?.court === c && x.res.started && !x.res.ended)
+            // Assigned here but not started — from this board or from Line-up.
+            // `items` runs in partai order, so this is the next one up on court.
+            const next = on ?? items.find(x => x.res?.court === c && !x.res.started)
             return (
-              <div key={c} className={`rd-court${on ? ' on' : ''}`}>
+              <div key={c} className={`rd-court${on ? ' on' : next ? ' next' : ''}`}>
                 <div className="rd-court-h">
                   <span className="rd-court-n">Lapangan {c}</span>
                   {on && <span className="rd-court-t">{elapsed(on.res, nowMs)}′</span>}
                 </div>
-                {on ? (
+                {next ? (
                   <>
-                    <div className="rd-court-m">{tag(on)}</div>
+                    <div className="rd-court-m">{tag(next)}</div>
                     <div className="rd-court-a">
-                      <button className="btn btn-primary btn-sm"
-                        onClick={() => runPartai(on.k, on.p, { ended: Date.now() })}>Selesai</button>
-                      <button className="icon-btn" title="Batalkan mulai"
-                        aria-label={`Batalkan mulai lapangan ${c}`}
-                        onClick={() => runPartai(on.k, on.p, { started: undefined, ended: undefined })}>×</button>
+                      {on
+                        ? <button className="btn btn-primary btn-sm"
+                            onClick={() => runPartai(next.k, next.p, { ended: Date.now() })}>Selesai</button>
+                        : <button className="btn btn-primary btn-sm"
+                            onClick={() => runPartai(next.k, next.p, { started: Date.now(), ended: undefined })}>
+                            Mulai
+                          </button>}
+                      <button className="icon-btn"
+                        title={on ? 'Batalkan mulai' : 'Kosongkan lapangan'}
+                        aria-label={`${on ? 'Batalkan mulai' : 'Kosongkan'} lapangan ${c}`}
+                        onClick={() => runPartai(next.k, next.p,
+                          on ? { started: undefined, ended: undefined } : { court: undefined })}>×</button>
                     </div>
                   </>
                 ) : (
@@ -449,7 +460,7 @@ export function InternalRundown() {
                   const W = 100 / COURTS.length
                   return (
                     <div key={`${c.k}-${p}`}
-                      className={`rd-ev match${res.ended ? ' done' : ' running'}`}
+                      className={`rd-ev match${res.ended ? ' done' : res.started ? ' running' : ' plan'}`}
                       style={{
                         top: y(from), height: x.len * PX,
                         left: `${(x.court - 1) * W + lane * (W / of)}%`, width: `${W / of}%`,
@@ -465,7 +476,7 @@ export function InternalRundown() {
                           <span key={i} className={`lvl-badge ${LEVEL_CLASS[l]}`}>{l}</span>
                         ))}
                         <span className="rd-lap">
-                          {clock(from)} · {res.ended ? '' : '▶'}{min}′
+                          {clock(from)}{min !== undefined ? ` · ${res.ended ? '' : '▶'}${min}′` : ''}
                         </span>
                       </div>
                       {c.sides

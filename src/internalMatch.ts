@@ -438,7 +438,10 @@ export const ready = (slots: Slot[], here: Set<string>) =>
 
 // ── Points, courts and officials (/internal/lineup) ──────────────────────────
 export const COURTS = [1, 2, 3, 4]
-export const MAX_POINT = 42
+// A partai is played to 42, but a deuce runs past it — the paper sheets carry
+// scores like 43–41 — so the box accepts up to the hard cap rather than the
+// target. Two digits either way, so nothing in the entry changes.
+export const MAX_POINT = 45
 
 /** Which side of the pair won a partai: 0, 1, or undefined while undecided. */
 export function partaiWinner(r?: PartaiResult): 0 | 1 | undefined {

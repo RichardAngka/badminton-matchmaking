@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type {
-  Bracket, BracketKey, PartaiResult, Slot, TeamId, TourPlayer, TournamentState,
+  Bracket, BracketKey, Day, PartaiResult, Score, Slot, TeamId, TourPlayer, TournamentState,
 } from '../types'
 import {
   COURTS, DAY, EMPTY_BRACKET, LEVELS, LEVEL_CLASS, MAX_POINT, OTHER, PARTAI, SLOTS, WO,
@@ -11,7 +11,6 @@ import {
 } from '../internalMatch'
 import { TOURNAMENT_ID, supabase, upsertTournament } from '../supabase'
 import { useCaptainTeam, useIsAdmin } from '../RoleContext'
-import { LEVEL_COLOR } from './InternalMatch'
 
 const MATCHES: [BracketKey, string][] = [
   ['sf1', 'SF 1'], ['sf2', 'SF 2'], ['final', 'Final'], ['third', 'Juara 3'],
@@ -31,8 +30,6 @@ export function InternalLineup() {
   const captain = useCaptainTeam()
   const qc = useQueryClient()
   const [match, setMatch] = useState<BracketKey>('sf1')
-  const [open, setOpen] = useState<number | null>(null)   // expanded partai
-  const [openAll, setOpenAll] = useState(false)           // every partai's panel at once
   const [anyLevel, setAnyLevel] = useState(false)         // show off-grade players
 
   const { data: state } = useQuery({
@@ -88,20 +85,48 @@ export function InternalLineup() {
   const mine = (s: Side) => captain === s.team
   if (sides && !complete && !isAdmin) sides.forEach(s => { s.masked = !mine(s) })
   const canSee = isAdmin || complete || (!!sides && sides.some(mine))
+  // Two jobs, two shapes. Before the reveal a captain can only act on their own
+  // twenty — the opponent's column and the points are noise they cannot touch,
+  // and drawing them triples the scroll for nothing.
+  const own = sides?.find(mine)
+  const filling = !isAdmin && !complete && !!own
 
   // ponytail: whole-blob write per edit, same last-write-wins as the other
-  // internal pages. Every control here is a select or a blur, so no debounce.
-  const save = async (next: TournamentState) => {
+  // internal pages. The patch reads the row out of the cache rather than closing
+  // over this render's copy: a check-in here and a pick a second later would
+  // otherwise both build on the same stale players array, and the pick would
+  // quietly undo the check-in.
+  const save = async (patch: (cur: TournamentState) => TournamentState) => {
     await qc.cancelQueries({ queryKey: ['tournament'] })  // an in-flight refetch would undo this edit
+    const next = patch(qc.getQueryData<TournamentState>(['tournament']) ?? state)
     qc.setQueryData(['tournament'], next)
     mut.mutate(next)
   }
-  const pick = (s: Side, i: number, v: Slot) => save({
-    ...state,
-    lineups: { ...state.lineups, [s.team]: { ...state.lineups?.[s.team], [day]: setSlot(s.slots, i, v) } },
-  })
-  const editPartai = (i: number, patch: Partial<PartaiResult>) =>
-    save({ ...state, bracket: setPartai(b, match, i, patch) })
+  const pick = (s: Side, i: number, v: Slot) => save(cur => ({
+    ...cur,
+    lineups: {
+      ...cur.lineups,
+      [s.team]: { ...cur.lineups?.[s.team], [day]: setSlot(lineupOf(cur, s.team, day), i, v) },
+    },
+  }))
+  const editPartai = (i: number, patch: Partial<PartaiResult>) => save(cur => ({
+    ...cur,
+    bracket: setPartai({ ...EMPTY_BRACKET, ...cur.bracket }, match, i, patch),
+  }))
+  /**
+   * Checks a player in for this match's day, writing the same players[].present
+   * that /internal/absen writes — so it lands on that page, and on every other
+   * open phone, without this page knowing anything about it.
+   *
+   * One way only: a name that is holding the twenty back is a problem worth
+   * fixing where it is seen, but un-checking someone is an absen job, and
+   * twenty "hadir" toggles here would bury the one that matters.
+   */
+  const markHere = (id: string) => save(cur => ({
+    ...cur,
+    players: cur.players.map(x =>
+      x.id === id && !isHere(x, day) ? { ...x, present: [...(x.present ?? []), day] } : x),
+  }))
 
   return (
     <section className="ws-section">
@@ -110,7 +135,7 @@ export function InternalLineup() {
           <h2>Line-up</h2>
           <span className="ws-head-sub">
             {isAdmin || captain
-              ? 'Tampil ke semua setelah kedua tim lengkap: pemain yang sudah hadir, atau WO.'
+              ? 'Kedua susunan tampil setelah tiap tim memasang 20 pemain yang sudah hadir.'
               : 'Susunan pemain tiap partai'}
           </span>
         </div>
@@ -120,165 +145,261 @@ export function InternalLineup() {
         {MATCHES.map(([k, l]) => (
           <button key={k} role="tab" aria-selected={match === k}
             className={`im-seg${match === k ? ' on' : ''}`}
-            onClick={() => { setMatch(k); setOpen(null) }}>
+            onClick={() => setMatch(k)}>
             <span className="im-tab-label">{l}</span>
           </button>
         ))}
       </div>
 
-      {!sides ? <div className="im-empty">Menunggu hasil semifinal.</div>
-        // Viewers see nothing until both sides are in, so neither captain can
-        // counter-pick. ponytail: hidden in the UI only — the row is public,
-        // real secrecy needs its own RLS-guarded table.
-        : !canSee
-          ? <div className="im-empty">
-              Line-up belum lengkap · {sides.map(s => `${s.name} ${ready(s.slots, s.here)}/${SLOTS.length}`).join(' · ')}
+      {!sides ? <div className="im-empty">Line-up terbuka setelah hasil semifinal masuk.</div>
+        : <>
+            {/* The tie score and each side's shortfall, in reach from partai 10
+                as well as partai 1. */}
+            <div className="lu-bar">
+              <SideStat s={sides[0]} />
+              <div className="lu-bar-net">
+                <span className="lu-bar-sc">{score?.[0] ?? 0}</span>
+                <span className="lu-bar-rule" aria-hidden />
+                <span className="lu-bar-sc">{score?.[1] ?? 0}</span>
+                <span className="lu-bar-unit">partai</span>
+              </div>
+              <SideStat s={sides[1]} end />
             </div>
-          : <>
+
+            {(isAdmin || captain) && (
               <div className="im-controls">
+                {/* Grade is the format, fixed per slot; this opens the other
+                    grades for a stand-in when someone is hurt or missing. */}
+                <button className={`btn btn-ghost btn-sm${anyLevel ? ' on' : ''}`}
+                  aria-pressed={anyLevel} onClick={() => setAnyLevel(v => !v)}>
+                  {anyLevel ? 'Kembali ke grade slot' : 'Buka semua grade'}
+                </button>
                 {isAdmin && (
                   <button className="btn btn-ghost btn-sm" disabled={!complete}
-                    onClick={() => exportPNG(label, sides)}>Export PNG</button>
-                )}
-                {/* All ten partai as one list, to fill lapangan/poin/petugas in
-                    one pass before play starts. */}
-                <button className={`btn btn-ghost btn-sm${openAll ? ' on' : ''}`}
-                  aria-pressed={openAll}
-                  onClick={() => { setOpenAll(v => !v); setOpen(null) }}>
-                  {openAll ? 'Tutup semua' : 'Buka semua'}
-                </button>
-                {(isAdmin || captain) && (
-                  /* Grade is fixed per slot; this opens the other grades for a
-                     stand-in when someone is hurt or missing. */
-                  <button className={`btn btn-ghost btn-sm${anyLevel ? ' on' : ''}`}
-                    aria-pressed={anyLevel} onClick={() => setAnyLevel(v => !v)}>
-                    {anyLevel ? 'Batasi ke grade' : 'Pemain lain'}
-                  </button>
+                    title={complete ? undefined : 'Kedua tim harus lengkap dulu'}
+                    onClick={() => exportPNG({
+                      label, day, date: dayDate(b, day), sides, results, score,
+                      tiebreak: b.tiebreak?.[match],
+                    })}>Unduh score sheet</button>
                 )}
               </div>
+            )}
 
-              <div className="lu-wrap">
-                <table className="lu">
-                  <colgroup><col className="lu-c0" /><col /><col /></colgroup>
-                  <thead>
-                    <tr>
-                      <th aria-label="Partai" />
-                      {sides.map((s, j) => (
-                        <th key={s.team} scope="col">
-                          <span className="lu-team">{s.name}</span>
-                          <span className="lu-head-n">
-                            {score && <span className="lu-score">{score[j]}</span>}
-                            {(isAdmin || captain) && (
-                              <span className={`lu-count${ready(s.slots, s.here) === SLOTS.length ? ' ok' : ''}`}>
-                                {ready(s.slots, s.here)}/{SLOTS.length}
-                              </span>
-                            )}
-                          </span>
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-
-                  {PARTAI.map((levels, p) => {
-                    const r = results[p]
-                    const won = partaiWinner(r)
-                    return (
-                      <tbody key={p}>
-                        <tr>
-                          <th scope="row">
-                            {levels.map((l, k) => (
-                              <div key={k} className="lu-line">
-                                <span className="lu-num">{k === 0 ? p + 1 : ''}</span>
-                                <span className={`lvl-badge ${LEVEL_CLASS[l]}`}>{l}</span>
-                              </div>
-                            ))}
-                          </th>
-                          {sides.map((s, j) => (
-                            <td key={s.team} className={won === j ? 'win' : won === undefined ? '' : 'lose'}>
-                              {levels.map((_, k) => (
-                                <SlotCell key={k} side={s} i={p * 2 + k} anyLevel={anyLevel}
-                                  canEdit={isAdmin || mine(s)} won={won === j && k === 0}
-                                  onPick={v => pick(s, p * 2 + k, v)} />
-                              ))}
-                            </td>
-                          ))}
-                        </tr>
-                        <tr className="lu-meta-row">
-                          <td colSpan={3}>
-                            <button className="lu-meta" aria-expanded={openAll || open === p}
-                              onClick={() => setOpen(open === p ? null : p)}>
-                              <span className="lu-meta-txt">{metaLine(r, state, sides, won)}</span>
-                              <span className="lu-meta-caret" aria-hidden>{openAll || open === p ? '▴' : '▾'}</span>
-                            </button>
-                          </td>
-                        </tr>
-                        {(openAll || open === p) && (
-                          <tr className="lu-panel-row">
-                            <td colSpan={3}>
-                              <PartaiPanel
-                                r={r} p={p} isAdmin={isAdmin} state={state} day={day} pair={pair}
-                                clash={!!r?.court && b.results?.[OTHER[match]]?.[p]?.court === r.court}
-                                sides={sides}
-                                onEdit={patch => editPartai(p, patch)}
-                              />
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    )
-                  })}
-                </table>
-              </div>
-            </>}
+            {/* Viewers see nothing until both sides are in, so neither captain
+                can counter-pick. ponytail: hidden in the UI only — the row is
+                public, real secrecy needs its own RLS-guarded table. */}
+            {!canSee
+              ? <p className="lu-locked">
+                  Kedua susunan tampil di sini setelah masing-masing tim memasang 20 pemain
+                  yang sudah hadir.
+                </p>
+              : filling
+                ? <FillList s={own!} anyLevel={anyLevel} onPick={pick} />
+                : <ol className="lu-sheet">
+                    {PARTAI.map((_, p) => (
+                      <PartaiCard key={p} p={p} r={results[p]} sides={sides} isAdmin={isAdmin}
+                        canEdit={s => isAdmin || mine(s)} anyLevel={anyLevel}
+                        onHere={isAdmin ? markHere : undefined}
+                        state={state} day={day} pair={pair}
+                        clash={!!results[p]?.court && b.results?.[OTHER[match]]?.[p]?.court === results[p]?.court}
+                        onPick={pick} onEdit={patch => editPartai(p, patch)} />
+                    ))}
+                  </ol>}
+          </>}
     </section>
   )
 }
 
-/** How long a partai took, worded as the jadwal's Lapangan board words it. */
-const runLabel = (r?: PartaiResult) => !r?.started ? '–' : r.ended ? `${elapsed(r)} menit` : 'berjalan'
-
-/** The one-line summary under a partai: court, points, winner, wasit. */
-function metaLine(r: PartaiResult | undefined, state: TournamentState, sides: Side[], won?: 0 | 1) {
-  const name = (id?: string) => state.players.find(p => p.id === id)?.name
-  const bits = [
-    `Lap ${r?.court ?? '–'}`,
-    r?.score ? `${r.score[0]} – ${r.score[1]}` : 'belum ada poin',
-  ]
-  // A running partai shows no number: this page has no clock tick, so a counter
-  // would sit frozen at the minute the page happened to render.
-  if (r?.ended) bits.push(`${elapsed(r)} menit`)
-  else if (r?.started) bits.push('▶ main')
-  if (won !== undefined) bits.push(`✓ ${sides[won].name}`)
-  bits.push(`W: ${name(r?.wasit) ?? '–'}`)
-  return bits.join(' · ')
+/** What is still holding a side's twenty back, in the words the absen page uses. */
+function shortfall(s: Side) {
+  const empty = s.slots.filter(v => v === null).length
+  const away = s.slots.filter(v => v && v !== WO && !s.here.has(v)).length
+  const bits: string[] = []
+  if (empty) bits.push(`${empty} kosong`)
+  if (away) bits.push(`${away} belum hadir`)
+  return bits.length ? bits.join(', ') : null
 }
 
-function SlotCell({ side, i, canEdit, anyLevel, won, onPick }: {
+/** A side of the tally bar: its name, and what it still needs. */
+function SideStat({ s, end }: { s: Side; end?: boolean }) {
+  const short = shortfall(s)
+  return (
+    <div className={`lu-bar-s${end ? ' b' : ''}`}>
+      <span className="lu-bar-team">{s.name}</span>
+      <span className={`lu-bar-state${short ? '' : ' ok'}`}>{short ?? 'Siap'}</span>
+    </div>
+  )
+}
+
+/** A captain's own twenty, in partai pairs. Nothing else is theirs to set yet. */
+function FillList({ s, anyLevel, onPick }: {
+  s: Side
+  anyLevel: boolean
+  onPick: (s: Side, i: number, v: Slot) => void
+}) {
+  return (
+    <ol className="lu-fill">
+      {PARTAI.map((_, p) => (
+        <li key={p} className="lu-fill-p">
+          <span className="lu-fill-n">Partai {p + 1}</span>
+          <div className="lu-fill-rows">
+            {[0, 1].map(k => (
+              <SlotRow key={k} side={s} i={p * 2 + k} canEdit anyLevel={anyLevel}
+                onPick={v => onPick(s, p * 2 + k, v)} />
+            ))}
+          </div>
+        </li>
+      ))}
+    </ol>
+  )
+}
+
+/** One partai: two sides eitherteside of the net, points astride it. */
+function PartaiCard({ p, r, sides, isAdmin, canEdit, anyLevel, state, day, pair, clash, onPick, onEdit, onHere }: {
+  p: number
+  r?: PartaiResult
+  sides: Side[]
+  isAdmin: boolean
+  canEdit: (s: Side) => boolean
+  anyLevel: boolean
+  onHere?: (id: string) => void
+  state: TournamentState
+  day: 1 | 2
+  pair: (TeamId | undefined)[]
+  clash: boolean
+  onPick: (s: Side, i: number, v: Slot) => void
+  onEdit: (patch: Partial<PartaiResult>) => void
+}) {
+  const won = partaiWinner(r)
+  const live = !!r?.started && !r.ended
+  // A running partai shows no counter: this page has no clock tick, so a number
+  // would sit frozen at the minute the page happened to render.
+  const when = live ? 'Sedang main' : r?.ended ? `${elapsed(r)} menit` : null
+  const setScore = (j: 0 | 1, n: number) => {
+    const other = r?.score?.[1 - j] ?? 0
+    onEdit({ score: (j === 0 ? [n, other] : [other, n]) as [number, number] })
+  }
+  const group = (j: 0 | 1) => (
+    <SideGroup s={sides[j]} j={j} p={p} pts={r?.score?.[j]} won={won}
+      canEdit={canEdit(sides[j])} editPoints={isAdmin} anyLevel={anyLevel}
+      onPick={onPick} onScore={n => setScore(j, n)} onHere={onHere} />
+  )
+  return (
+    <li className={`lu-p${live ? ' live' : !r?.court && !r?.started ? ' unset' : ''}`}>
+      <div className="lu-p-h">
+        <span className="lu-p-n">Partai {p + 1}</span>
+        {when && <span className="lu-p-when">{when}</span>}
+        {isAdmin ? (
+          <div className="lu-p-act">
+            <select className={`lu-in${clash ? ' away' : ''}`} value={r?.court ?? ''}
+              aria-label={`Lapangan partai ${p + 1}`}
+              title={clash ? 'Lapangan ini dipakai partai yang sama di pertandingan satunya' : undefined}
+              onChange={e => onEdit({ court: Number(e.target.value) || undefined })}>
+              <option value="">Pilih lapangan</option>
+              {COURTS.map(c => <option key={c} value={c}>Lapangan {c}</option>)}
+            </select>
+            {live
+              ? <button className="btn btn-primary btn-sm"
+                  onClick={() => onEdit({ ended: Date.now() })}>Selesai</button>
+              : <button className="btn btn-ghost btn-sm" disabled={!r?.court}
+                  title={r?.court ? undefined : 'Pilih lapangan dulu'}
+                  onClick={() => onEdit({ started: Date.now(), ended: undefined })}>
+                  {r?.ended ? 'Mulai ulang' : 'Mulai'}
+                </button>}
+          </div>
+        ) : (
+          <span className="lu-p-lap">
+            {r?.court ? `Lapangan ${r.court}` : 'Lapangan belum diatur'}
+          </span>
+        )}
+      </div>
+
+      <div className="lu-p-body">
+        {group(0)}
+        <div className="lu-net" aria-hidden />
+        {group(1)}
+      </div>
+
+      <Crew r={r} p={p} isAdmin={isAdmin} state={state} day={day} pair={pair} onEdit={onEdit} />
+    </li>
+  )
+}
+
+/** One team's half of a partai: who they field, and the points they scored. */
+function SideGroup({ s, j, p, pts, won, canEdit, editPoints, anyLevel, onPick, onScore, onHere }: {
+  s: Side
+  j: number
+  p: number
+  pts?: number
+  won?: 0 | 1
+  canEdit: boolean
+  editPoints: boolean
+  anyLevel: boolean
+  onPick: (s: Side, i: number, v: Slot) => void
+  onScore: (n: number) => void
+  onHere?: (id: string) => void
+}) {
+  const outcome = won === undefined ? '' : won === j ? ' won' : ' lost'
+  return (
+    <div className={`lu-side${j ? ' b' : ''}${outcome}`}>
+      <div className="lu-side-h">
+        <span className="lu-side-team">{s.name}</span>
+        {won === j && <span className="lu-side-won">Menang</span>}
+        {editPoints
+          ? <PointBox value={pts} label={`Poin ${s.name} partai ${p + 1}`} onCommit={onScore} />
+          : <span className="lu-side-pt">{pts ?? '–'}</span>}
+      </div>
+      {[0, 1].map(k => (
+        <SlotRow key={k} side={s} i={p * 2 + k} canEdit={canEdit} anyLevel={anyLevel}
+          onPick={v => onPick(s, p * 2 + k, v)} onHere={onHere} />
+      ))}
+    </div>
+  )
+}
+
+/**
+ * One slot: the grade it is for, who fills it, and anything wrong with that.
+ * Each fact appears once — the closed select carries the name, the chips carry
+ * the problems, so nothing has to be read out of a truncated option label.
+ */
+function SlotRow({ side, i, canEdit, anyLevel, onPick, onHere }: {
   side: Side
   i: number
   canEdit: boolean
   anyLevel: boolean
-  won: boolean
   onPick: (v: Slot) => void
+  onHere?: (id: string) => void
 }) {
   const v = side.slots[i]
   const level = SLOTS[i]
   const p = side.members.find(m => m.id === v)
+  const badge = <span className={`lvl-badge ${LEVEL_CLASS[level]}`}>{level}</span>
 
-  if (side.masked) return <div className="lu-line"><span className="lu-name hid">—</span></div>
+  if (side.masked) {
+    return <div className="lu-row">{badge}<span className="lu-hid">Belum tampil</span></div>
+  }
 
-  const sub = p && p.level !== level && (
-    <span className="lu-sub" title={`${p.level} main di slot ${level}`}>⚠{p.level}</span>
+  const away = !!p && !side.here.has(p.id)
+  const chips = (
+    <>
+      {p && p.level !== level && (
+        <span className="lu-chip grade" title={`${p.level} main di slot ${level}`}>grade {p.level}</span>
+      )}
+      {p && away && (onHere
+        ? <button type="button" className="lu-chip away act" title={`Tandai ${p.name} hadir`}
+            onClick={() => onHere(p.id)}>Tandai hadir</button>
+        : <span className="lu-chip away">belum hadir</span>)}
+    </>
   )
 
   if (!canEdit) {
     return (
-      <div className="lu-line">
-        {won && <span className="lu-win" aria-label="Menang">✓</span>}
+      <div className="lu-row">
+        {badge}
         {v === WO
           ? <span className="lu-name wo">WO</span>
-          : <span className="lu-name">{p?.name}</span>}
-        {sub}
+          : <span className="lu-name">{p?.name ?? '–'}</span>}
+        {chips}
       </div>
     )
   }
@@ -288,26 +409,24 @@ function SlotCell({ side, i, canEdit, anyLevel, won, onPick }: {
     const j = side.slots.indexOf(id)
     return j >= 0 && j !== i ? ` · P${(j >> 1) + 1}` : ''
   }
-  // The closed select shows the picked option's label, so a no-show's own
-  // label is what flags them in the table.
+  // Attendance is the optgroup's job, so the label carries only what the closed
+  // select has to say: the name, an off-grade marker, and a move warning.
   const opt = (m: TourPlayer) => (
     <option key={m.id} value={m.id}>
-      {m.name}{m.level !== level ? ` (${m.level})` : ''}
-      {side.here.has(m.id) ? '' : ' · belum hadir'}{where(m.id)}
+      {m.name}{m.level !== level ? ` (${m.level})` : ''}{where(m.id)}
     </option>
   )
-  // Grade-only unless the admin opened it up: the slot's grade is the format.
+  // Grade-only unless it has been opened up: the slot's grade is the format.
   const eligible = side.members.filter(m => anyLevel || m.level === level || m.id === v)
   const here = eligible.filter(m => side.here.has(m.id))
-  const away = p && !side.here.has(p.id)
   return (
-    <div className="lu-line">
-      {won && <span className="lu-win" aria-label="Menang">✓</span>}
-      <select className={`lu-pick${v ? '' : ' empty'}${away ? ' away' : ''}`} value={v ?? ''}
+    <div className="lu-row">
+      {badge}
+      <select className={`lu-sel${v ? '' : ' empty'}${away ? ' away' : ''}`} value={v ?? ''}
         aria-label={`${side.name} partai ${(i >> 1) + 1} (${level})`}
         onChange={e => onPick(e.target.value || null)}>
-        <option value="">–</option>
-        <optgroup label={anyLevel ? 'Sudah hadir' : level}>
+        <option value="">Belum dipilih</option>
+        <optgroup label="Sudah hadir">
           {here.filter(m => m.level === level).map(opt)}
           {anyLevel && here.filter(m => m.level !== level).map(opt)}
         </optgroup>
@@ -316,38 +435,24 @@ function SlotCell({ side, i, canEdit, anyLevel, won, onPick }: {
         </optgroup>
         <option value={WO}>WO (walkover)</option>
       </select>
-      {sub}
+      {chips}
     </div>
   )
 }
 
-/** Court, points and officials for one partai. Admin-only to edit. */
-function PartaiPanel({ r, p, isAdmin, state, day, pair, clash, sides, onEdit }: {
+/** Wasit and linesman. Folded away: courtside it is set once and then read. */
+function Crew({ r, p, isAdmin, state, day, pair, onEdit }: {
   r?: PartaiResult
   p: number
   isAdmin: boolean
   state: TournamentState
   day: 1 | 2
   pair: (TeamId | undefined)[]
-  clash: boolean
-  sides: Side[]
   onEdit: (patch: Partial<PartaiResult>) => void
 }) {
   const crew = officials(state, pair, day)
   const name = (id?: string) => state.players.find(x => x.id === id)?.name ?? '–'
   const lines = r?.lines ?? []
-
-  if (!isAdmin) {
-    return (
-      <dl className="lu-panel">
-        <div><dt>Lapangan</dt><dd>{r?.court ?? '–'}</dd></div>
-        <div><dt>Waktu main</dt><dd>{runLabel(r)}</dd></div>
-        <div><dt>Poin</dt><dd>{r?.score ? `${r.score[0]} – ${r.score[1]}` : '–'}</dd></div>
-        <div><dt>Wasit</dt><dd>{name(r?.wasit)}</dd></div>
-        <div><dt>Linesman</dt><dd>{[0, 1].map(i => name(lines[i])).join(' · ')}</dd></div>
-      </dl>
-    )
-  }
 
   const setCrew = (v: string, slot: 'wasit' | 0 | 1) => {
     if (slot === 'wasit') return onEdit({ wasit: v || undefined })
@@ -355,160 +460,240 @@ function PartaiPanel({ r, p, isAdmin, state, day, pair, clash, sides, onEdit }: 
     next[slot] = v
     onEdit({ lines: next.filter(Boolean) as string[] })
   }
-  const crewSelect = (value: string | undefined, label: string, slot: 'wasit' | 0 | 1) => (
-    <select className="lu-in" value={value ?? ''} aria-label={`${label} partai ${p + 1}`}
-      onChange={e => setCrew(e.target.value, slot)}>
-      <option value="">–</option>
-      {[...new Set(crew.map(c => c.team!))].map(t => (
-        <optgroup key={t} label={state.teamNames[t]}>
-          {crew.filter(c => c.team === t).map(c => (
-            <option key={c.id} value={c.id}>{c.name}</option>
+  const field = (value: string | undefined, label: string, slot: 'wasit' | 0 | 1) => (
+    <div className="lu-crew-f" key={label}>
+      <span>{label}</span>
+      {isAdmin ? (
+        <select className="lu-in" value={value ?? ''} aria-label={`${label} partai ${p + 1}`}
+          onChange={e => setCrew(e.target.value, slot)}>
+          <option value="">Belum dipilih</option>
+          {[...new Set(crew.map(c => c.team!))].map(t => (
+            <optgroup key={t} label={state.teamNames[t]}>
+              {crew.filter(c => c.team === t).map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </optgroup>
           ))}
-        </optgroup>
-      ))}
-    </select>
+        </select>
+      ) : <strong>{name(value)}</strong>}
+    </div>
   )
 
   return (
-    <dl className="lu-panel">
-      <div>
-        <dt>Lapangan</dt>
-        <dd>
-          <select className={`lu-in${clash ? ' away' : ''}`} value={r?.court ?? ''}
-            aria-label={`Lapangan partai ${p + 1}`}
-            title={clash ? 'Lapangan ini dipakai partai yang sama di pertandingan satunya' : undefined}
-            onChange={e => onEdit({ court: Number(e.target.value) || undefined })}>
-            <option value="">–</option>
-            {COURTS.map(c => <option key={c} value={c}>Lapangan {c}</option>)}
-          </select>
-        </dd>
+    <details className="lu-crew">
+      <summary className="lu-crew-s">
+        {r?.wasit ? `Wasit ${name(r.wasit)}` : 'Petugas belum diatur'}
+      </summary>
+      <div className="lu-crew-b">
+        {field(r?.wasit, 'Wasit', 'wasit')}
+        {field(lines[0], 'Linesman 1', 0)}
+        {field(lines[1], 'Linesman 2', 1)}
       </div>
-      <div>
-        <dt>Waktu main</dt>
-        <dd className="lu-points">
-          {r?.started && !r.ended
-            ? <button className="btn btn-primary btn-sm"
-                onClick={() => onEdit({ ended: Date.now() })}>Selesai</button>
-            : <button className="btn btn-ghost btn-sm" disabled={!r?.court}
-                title={r?.court ? undefined : 'Pilih lapangan dulu'}
-                onClick={() => onEdit({ started: Date.now(), ended: undefined })}>
-                {r?.ended ? 'Mulai ulang' : 'Mulai'}
-              </button>}
-          {r?.started && <span className="lu-dur">{runLabel(r)}</span>}
-        </dd>
-      </div>
-      <div>
-        <dt>Poin</dt>
-        <dd className="lu-points">
-          {sides.map((s, j) => (
-            <PointBox key={s.team} value={r?.score?.[j]} label={`Poin ${s.name} partai ${p + 1}`}
-              onCommit={n => {
-                const other = r?.score?.[1 - j] ?? 0
-                onEdit({ score: (j === 0 ? [n, other] : [other, n]) as [number, number] })
-              }} />
-          ))}
-        </dd>
-      </div>
-      <div><dt>Wasit</dt><dd>{crewSelect(r?.wasit, 'Wasit', 'wasit')}</dd></div>
-      <div>
-        <dt>Linesman</dt>
-        <dd className="lu-points">
-          {crewSelect(lines[0], 'Linesman 1', 0)}
-          {crewSelect(lines[1], 'Linesman 2', 1)}
-        </dd>
-      </div>
-    </dl>
+    </details>
   )
 }
 
 /**
- * A points box that saves when you leave it, not on every keystroke — typing
- * "21" would otherwise write a 2 first. Remounts when the stored value changes,
- * so another device's entry shows up here too.
+ * A points box: digits only, no blur or Enter needed. The digit shows at once
+ * but saves a third of a second after the last one — typing "21" would
+ * otherwise store a 2 first, and every phone on the realtime channel would see
+ * the wrong team leading. Winner falls out of comparing the two numbers.
  */
 function PointBox({ value, label, onCommit }: {
   value?: number
   label: string
   onCommit: (n: number) => void
 }) {
-  const commit = (raw: string) => {
-    const n = Math.round(Number(raw))
-    onCommit(Number.isFinite(n) ? Math.min(MAX_POINT, Math.max(0, n)) : 0)
+  const [raw, setRaw] = useState(String(value ?? ''))
+  useEffect(() => setRaw(String(value ?? '')), [value])
+  const timer = useRef<ReturnType<typeof setTimeout>>()
+  useEffect(() => () => clearTimeout(timer.current), [])
+  const type = (s: string) => {
+    const t = s.replace(/\D/g, '').slice(0, 2)
+    const n = Math.min(MAX_POINT, Number(t || 0))
+    setRaw(t === '' ? '' : String(n))
+    clearTimeout(timer.current)
+    timer.current = setTimeout(() => { timer.current = undefined; onCommit(n) }, 350)
+  }
+  // Leaving the box saves it now: switching match tab unmounts this, and a
+  // pending digit would go with it.
+  const flush = () => {
+    if (timer.current === undefined) return
+    clearTimeout(timer.current)
+    timer.current = undefined
+    onCommit(Math.min(MAX_POINT, Number(raw || 0)))
   }
   return (
-    <input key={String(value ?? '')} className="lu-in lu-point" type="number"
-      inputMode="numeric" min={0} max={MAX_POINT} defaultValue={value ?? ''} aria-label={label}
-      onBlur={e => commit(e.target.value)}
-      onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }} />
+    <input className="lu-pt" type="text" inputMode="numeric" placeholder="–"
+      value={raw} aria-label={label} autoComplete="off"
+      onChange={e => type(e.target.value)} onBlur={flush} />
   )
 }
 
-/** The selected match's lineup as one image, for the group chat. */
-async function exportPNG(label: string, sides: Side[]) {
-  await document.fonts.ready  // Inter must be loaded or the canvas falls back
-  const PAD = 24, TITLE = 56, HEAD = 40, LINE = 26, ROW = LINE * 2 + 12
-  const NUM = 30, LV = 60, COL = 240, GAP = 10
-  const W = PAD * 2 + NUM + LV + COL * 2 + GAP
-  const H = TITLE + HEAD + PARTAI.length * ROW + PAD
-  const SCALE = 2  // retina-sharp when zoomed on a phone
+/**
+ * When a day was played, taken from the first partai actually started on it, so
+ * a sheet downloaded weeks later still carries the day's own date. Nothing
+ * started yet means the sheet is being printed to fill in, so: today.
+ */
+function dayDate(b: Bracket, day: Day) {
+  const started = (Object.keys(DAY) as BracketKey[])
+    .filter(k => DAY[k] === day)
+    .flatMap(k => b.results?.[k] ?? [])
+    .map(r => r?.started)
+    .filter((n): n is number => !!n)
+  return new Date(started.length ? Math.min(...started) : Date.now())
+}
 
+/** "29th", the way the paper sheet writes the date. */
+function ordinal(d: number) {
+  if (d % 100 >= 11 && d % 100 <= 13) return `${d}th`
+  return `${d}${['th', 'st', 'nd', 'rd'][d % 10] ?? 'th'}`
+}
+
+/**
+ * The match drawn as the paper scoresheet used at the hall: white, black ink,
+ * a shield either side of the title, the two teams' names flanking the score
+ * column, the tie total underneath and an empty tie-breaker row.
+ *
+ * It is one sheet for two moments — printed blank before play and shared filled
+ * in afterwards — so a partai with no points leaves its cells empty instead of
+ * drawing a 0 – 0 that never happened.
+ */
+async function exportPNG(o: {
+  label: string
+  day: Day
+  date: Date
+  sides: Side[]
+  results: PartaiResult[]
+  score?: Score
+  tiebreak?: TeamId
+}) {
+  await document.fonts.ready  // Inter must be loaded or the canvas falls back
+
+  const PAD = 36, NAME = 236, WIN = 68, SCORE = 190
+  const TW = NAME * 2 + WIN * 2 + SCORE
+  const W = TW + PAD * 2
+  const LOGO = 78, HEAD = 36, LINE = 31, ROW = LINE * 2
+  const TOP = 154                                   // under the title block
+  const TABLE = HEAD + PARTAI.length * ROW
+  const SUM_Y = TOP + TABLE + 20, SUM_H = 104
+  const TIE_Y = SUM_Y + SUM_H + 34, TIE_H = 48      // label sits above the box
+  const H = TIE_Y + TIE_H + PAD
+  const SCALE = 2                                   // retina-sharp when zoomed on a phone
+
+  const INK = '#111111'
   const canvas = document.createElement('canvas')
   canvas.width = W * SCALE
   canvas.height = H * SCALE
   const g = canvas.getContext('2d')!
   g.scale(SCALE, SCALE)
-  g.textBaseline = 'middle'
-  g.fillStyle = '#0e0e0e'
+  g.fillStyle = '#ffffff'
   g.fillRect(0, 0, W, H)
+  g.fillStyle = INK
+  g.strokeStyle = INK
+  g.textBaseline = 'middle'
 
-  g.fillStyle = '#e5e2e1'
-  g.font = '800 22px Inter, sans-serif'
-  g.fillText(`Line-up · ${label}`, PAD, PAD + 14)
+  const rule = (x1: number, y1: number, x2: number, y2: number, lw = 1.1) => {
+    g.lineWidth = lw
+    g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke()
+  }
+  const box = (x: number, y: number, w: number, h: number, lw = 1.8) => {
+    g.lineWidth = lw
+    g.strokeRect(x, y, w, h)
+  }
+  const mid = (s: string, x: number, y: number, font: string, max?: number) => {
+    g.font = font; g.textAlign = 'center'; g.fillText(s, x, y, max)
+  }
+  // Drawn rather than typed: a ✓ glyph is not guaranteed in every Inter build.
+  const tick = (x: number, y: number) => {
+    g.lineWidth = 3.4; g.lineCap = 'round'; g.lineJoin = 'round'
+    g.beginPath()
+    g.moveTo(x - 11, y + 1); g.lineTo(x - 3, y + 10); g.lineTo(x + 12, y - 10)
+    g.stroke()
+    g.lineWidth = 1; g.lineCap = 'butt'
+  }
 
-  const colX = (j: number) => PAD + NUM + LV + j * (COL + GAP)
-  sides.forEach((s, j) => {
-    g.fillStyle = '#adc7ff'
-    g.fillRect(colX(j), TITLE, COL, HEAD)
-    g.fillStyle = '#0A0800'
-    g.font = '800 16px Inter, sans-serif'
-    g.fillText(s.name, colX(j) + 12, TITLE + HEAD / 2, COL - 24)
-  })
+  // ── Title block ──
+  try {
+    const logo = new Image()
+    logo.src = encodeURI('/Logo PB SOR.png')
+    await logo.decode()
+    g.drawImage(logo, PAD + 8, 26, LOGO, LOGO)
+    g.drawImage(logo, W - PAD - 8 - LOGO, 26, LOGO, LOGO)
+  } catch { /* no logo file: the sheet reads fine without the shields */ }
 
-  PARTAI.forEach((levels, p) => {
-    const y = TITLE + HEAD + p * ROW
-    if (p % 2 === 0) {
-      g.fillStyle = '#131313'
-      g.fillRect(PAD, y, W - PAD * 2, ROW)
-    }
-    g.fillStyle = '#8b90a0'
-    g.font = '800 14px "JetBrains Mono", monospace'
-    g.fillText(String(p + 1), PAD + 6, y + 6 + LINE / 2)
+  const cx = W / 2
+  const when = `${o.date.toLocaleDateString('en-GB', { weekday: 'long' })}, `
+    + `${ordinal(o.date.getDate())} `
+    + `${o.date.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}`
+  mid(`INTERNAL MATCH DAY ${o.day}`, cx, 46, '700 23px Inter, sans-serif')
+  mid('PB SOR', cx, 79, '800 33px Inter, sans-serif')
+  mid('3RD YEAR ANNIVERSARY', cx, 107, '700 21px Inter, sans-serif')
+  mid(when, cx, 131, '500 14px Inter, sans-serif')
 
-    levels.forEach((lv, k) => {
-      const cy = y + 6 + LINE * k + LINE / 2
-      g.fillStyle = LEVEL_COLOR[lv]
-      g.font = '800 11px Inter, sans-serif'
-      g.fillText(lv, PAD + NUM, cy)
+  // ── Results table ──
+  const X = [PAD, PAD + NAME, PAD + NAME + WIN, PAD + NAME + WIN + SCORE, PAD + TW - NAME, PAD + TW]
+  const cell = (i: number) => (X[i] + X[i + 1]) / 2
+  const rowsY = TOP + HEAD
 
-      sides.forEach((s, j) => {
+  box(PAD, TOP, TW, TABLE)
+  for (let i = 1; i <= 4; i++) rule(X[i], TOP, X[i], TOP + TABLE, 1.4)
+  rule(PAD, rowsY, PAD + TW, rowsY, 1.8)
+
+  const headFont = '700 15px Inter, sans-serif'
+  mid(o.sides[0].name.toUpperCase(), cell(0), TOP + HEAD / 2, headFont, NAME - 14)
+  mid('WIN', cell(1), TOP + HEAD / 2, headFont)
+  mid('SCORE RESULTS', cell(2), TOP + HEAD / 2, headFont)
+  mid('WIN', cell(3), TOP + HEAD / 2, headFont)
+  mid(o.sides[1].name.toUpperCase(), cell(4), TOP + HEAD / 2, headFont, NAME - 14)
+
+  PARTAI.forEach((_, p) => {
+    const y = rowsY + p * ROW
+    const r = o.results[p]
+    const won = partaiWinner(r)
+    // A partai is two names deep but one result wide, so the light rule between
+    // the names stops at the WIN column, exactly as the printed sheet does.
+    rule(X[0], y + LINE, X[1], y + LINE, 0.7)
+    rule(X[4], y + LINE, X[5], y + LINE, 0.7)
+    if (p < PARTAI.length - 1) rule(X[0], y + ROW, X[5], y + ROW, 1.4)
+
+    o.sides.forEach((s, j) => {
+      [0, 1].forEach(k => {
         const m = s.members.find(x => x.id === s.slots[p * 2 + k])
-        g.fillStyle = m ? '#e5e2e1' : '#8b90a0'
-        g.font = `${m ? '' : 'italic '}600 14px Inter, sans-serif`
-        // maxWidth squeezes an overlong name instead of spilling into the badge
-        g.fillText(m ? m.name : 'WO', colX(j) + 12, cy, COL - 70)
-        if (m && m.level !== lv) {
-          g.fillStyle = '#FFB020'
-          g.font = '800 11px Inter, sans-serif'
-          g.textAlign = 'right'
-          g.fillText(`⚠${m.level}`, colX(j) + COL - 12, cy)
-          g.textAlign = 'left'
-        }
+        const label = m ? m.name.toUpperCase() : s.slots[p * 2 + k] === WO ? 'WO' : ''
+        mid(label, cell(j ? 4 : 0), y + LINE * k + LINE / 2, '600 15px Inter, sans-serif', NAME - 14)
       })
+      if (won === j) tick(cell(j ? 3 : 1), y + ROW / 2)
     })
+    if (r?.score) {
+      mid(`${r.score[0]} - ${r.score[1]}`, cell(2), y + ROW / 2, '800 24px Inter, sans-serif')
+    }
   })
+
+  // ── Tie total ──
+  const SUM_SPLIT = SUM_Y + 40
+  box(PAD, SUM_Y, TW, SUM_H)
+  rule(PAD, SUM_SPLIT, PAD + TW, SUM_SPLIT, 1.4)
+  const lx = PAD + TW * 0.24, rx = PAD + TW * 0.76
+  mid(o.sides[0].name.toUpperCase(), lx, SUM_Y + 20, '700 21px Inter, sans-serif', TW * 0.4)
+  mid('vs', cx, SUM_Y + 20, '500 17px Inter, sans-serif')
+  mid(o.sides[1].name.toUpperCase(), rx, SUM_Y + 20, '700 21px Inter, sans-serif', TW * 0.4)
+  mid(String(o.score?.[0] ?? ''), lx, SUM_SPLIT + 32, '800 38px Inter, sans-serif')
+  mid('-', cx, SUM_SPLIT + 32, '500 22px Inter, sans-serif')
+  mid(String(o.score?.[1] ?? ''), rx, SUM_SPLIT + 32, '800 38px Inter, sans-serif')
+
+  // ── Tie breaker: an empty row to fill by hand, ticked if one was played ──
+  g.textAlign = 'left'
+  g.font = '700 15px Inter, sans-serif'
+  g.fillText('TIE BREAKER:', PAD, TIE_Y - 16)
+  box(PAD, TIE_Y, TW, TIE_H)
+  for (let i = 1; i <= 4; i++) rule(X[i], TIE_Y, X[i], TIE_Y + TIE_H, 1.4)
+  mid('-', cell(2), TIE_Y + TIE_H / 2, '500 18px Inter, sans-serif')
+  o.sides.forEach((s, j) => { if (o.tiebreak && o.tiebreak === s.team) tick(cell(j ? 3 : 1), TIE_Y + TIE_H / 2) })
 
   const a = document.createElement('a')
   a.href = canvas.toDataURL('image/png')
-  a.download = `pbsor-lineup-${label.replace(/\s/g, '').toLowerCase()}-${new Date().toLocaleDateString('en-CA')}.png`
+  a.download = `pbsor-day${o.day}-${o.label.replace(/\s/g, '').toLowerCase()}`
+    + `-${o.date.toLocaleDateString('en-CA')}.png`
   a.click()
 }
