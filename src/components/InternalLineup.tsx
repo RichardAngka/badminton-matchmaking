@@ -175,8 +175,12 @@ export function InternalLineup() {
                   {anyLevel ? 'Kembali ke grade slot' : 'Buka semua grade'}
                 </button>
                 {isAdmin && (
-                  <button className="btn btn-ghost btn-sm" disabled={!complete}
-                    title={complete ? undefined : 'Kedua tim harus lengkap dulu'}
+                  /* No completeness gate. It guarded nothing — an admin is
+                     already looking at both susunan — and it blocked the sheet
+                     when it is most wanted: empty, printed before play, to fill
+                     in by hand. A slot with nobody in it draws as an empty box,
+                     a partai with no points draws as an empty score cell. */
+                  <button className="btn btn-ghost btn-sm"
                     onClick={() => exportPNG({
                       label, day, date: dayDate(b, day), sides, results, score,
                       tiebreak: b.tiebreak?.[match],

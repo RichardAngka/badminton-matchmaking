@@ -437,7 +437,13 @@ export const ready = (slots: Slot[], here: Set<string>) =>
   slots.filter(s => s === WO || (s !== null && here.has(s))).length
 
 // ── Points, courts and officials (/internal/lineup) ──────────────────────────
-export const COURTS = [1, 2, 3, 4]
+/**
+ * Every lapangan a partai can be put on. The giliran only ever fills the first
+ * COURTS_PER_MATCH * 2 of them (see defaultCourt), so lapangan past that are
+ * spare: the estimated jadwal never schedules one, but an admin can move a
+ * partai onto it by hand on the Line-up or Jadwal page.
+ */
+export const COURTS = [1, 2, 3, 4, 5]
 // A partai is played to 42, but a deuce runs past it — the paper sheets carry
 // scores like 43–41 — so the box accepts up to the hard cap rather than the
 // target. Two digits either way, so nothing in the entry changes.
@@ -531,9 +537,10 @@ export const snapTime = (t: string) => clock(snap(mins(t)))
 export const PARTAI_MIN = 30
 
 /**
- * Lapangan per pertandingan: 4 lapangan, 2 pertandingan jalan bersamaan, jadi
- * tiap pertandingan main 2 partai sekaligus. 10 partai = 5 giliran, jadi dari
- * jam 19:00 selesai 21:30.
+ * Lapangan per pertandingan: 2 pertandingan jalan bersamaan, tiap pertandingan
+ * main 2 partai sekaligus, jadi satu giliran pakai 4 lapangan. 10 partai = 5
+ * giliran, jadi dari jam 19:00 selesai 21:30. Lapangan sisa di COURTS tidak
+ * masuk hitungan ini — dipakai manual, bukan oleh perkiraan jadwal.
  */
 export const COURTS_PER_MATCH = 2
 
@@ -664,8 +671,10 @@ export function lanesOf(spans: [number, number][]): { lane: number; of: number }
 
 /**
  * The lapangan a partai plays on before anyone assigns one: the day's first
- * match takes 1-2, its second 3-4, so the two matches never share a court.
- * `match` is 0 or 1 — the order the day's two matches are listed in.
+ * match takes 1-2, its second 3-4, so the two matches never share a court. A
+ * spare lapangan is never handed out here — it only ever holds what an admin
+ * moved onto it. `match` is 0 or 1 — the order the day's two matches are
+ * listed in.
  */
 export const defaultCourt = (match: number, p: number) =>
   match * COURTS_PER_MATCH + (p % COURTS_PER_MATCH) + 1
@@ -844,10 +853,15 @@ if (import.meta.env.DEV) {
   console.assert(runs(EMPTY_BRACKET, 1)[0] === undefined && elapsed(undefined) === undefined,
     '[jadwal] an untimed partai should report nothing')
 
-  // One giliran fills all four lapangan: both matches, both of their partai.
+  // One giliran fills the rotation — both matches, both of their partai, one
+  // lapangan each. Any lapangan past the rotation is spare and stays empty
+  // until someone assigns it, so this compares against the rotation, not COURTS.
+  const rotation = COURTS.slice(0, COURTS_PER_MATCH * 2)
   console.assert(
-    [0, 1].flatMap(m => [0, 1].map(p => defaultCourt(m, p))).sort().join() === COURTS.join(),
-    '[jadwal] a giliran does not cover lapangan 1-4 exactly once')
+    [0, 1].flatMap(m => [0, 1].map(p => defaultCourt(m, p))).sort().join() === rotation.join(),
+    '[jadwal] a giliran does not cover the rotation lapangan exactly once')
+  console.assert(rotation.length === COURTS_PER_MATCH * 2,
+    '[jadwal] fewer lapangan than one giliran needs')
   console.assert(defaultCourt(0, 8) === 1 && defaultCourt(1, 9) === 4,
     '[jadwal] the later giliran left its lapangan')
   const sp = lanesOf([[1400, 1440], [1430, 1460], [1500, 1530]])

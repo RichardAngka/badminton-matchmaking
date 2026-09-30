@@ -1629,7 +1629,7 @@ body::before {
   position: absolute; right: 6px; transform: translateY(-50%);
   font-family: 'JetBrains Mono', monospace; font-size: 10.5px; font-weight: 700; color: var(--dim);
 }
-.rd-day { flex: 1 1 0; min-width: 0; }
+.rd-day { flex: 1 1 0; min-width: 280px; }
 .rd-head {
   height: var(--rd-head); display: flex; flex-direction: column; justify-content: center; gap: 3px;
   padding: 0 8px; background: var(--surface); border: 1px solid var(--border);
@@ -1640,7 +1640,7 @@ body::before {
   font-family: 'JetBrains Mono', monospace; font-size: 10.5px; font-weight: 700; color: var(--dim);
 }
 .rd-head-cols { display: flex; }
-/* The body's columns are lapangan 1-4, so the head names them and the body
+/* The body's columns are the lapangan, so the head names them and the body
    draws their dividers. A partai sits in the court it is played on. */
 .rd-head-lap { display: flex; margin: 0 -8px -1px; border-top: 1px solid var(--border); }
 .rd-head-l {
@@ -1753,7 +1753,10 @@ body::before {
 /* Lapangan board (admin): the four courts as they stand right now. Sending a
    partai onto one starts its clock, so the grid above re-times itself off what
    actually happened instead of the estimate. */
-.rd-courts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
+.rd-courts {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+  gap: 8px; margin-bottom: 12px;
+}
 .rd-court {
   display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 8px;
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
@@ -1770,7 +1773,6 @@ body::before {
   overflow: hidden; text-overflow: ellipsis;
 }
 .rd-court-a { display: flex; align-items: center; gap: 6px; margin-top: auto; }
-@media (max-width: 720px) { .rd-courts { grid-template-columns: repeat(2, 1fr); } }
 
 /* A partai on court now, one whose time has been taken, and one only assigned
    a lapangan so far — dashed, because it is a plan, not a record. */
