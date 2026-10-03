@@ -18,7 +18,7 @@ import { InternalLineup } from './components/InternalLineup'
 import { InternalAbsen } from './components/InternalAbsen'
 import { InternalRundown } from './components/InternalRundown'
 import { matchCostByPlayer, playerTotal } from './ledgerMath'
-import { useCaptainTeam, useIsAdmin, useSignedIn } from './RoleContext'
+import { useCaptainTeam, useIsAdmin } from './RoleContext'
 
 const INTERNAL_TABS: [string, string][] = [
   ['/internal-match', 'Tim'],
@@ -68,6 +68,10 @@ export function App() {
     internal: '/internal-match',
   }
   const mainTab: Tab = ROUTE_TAB[pathname] ?? 'lapangan'
+  // An unknown path inside the tool falls back to the courts; the URL is
+  // corrected to match rather than left pointing at a page that is not there.
+  const known = pathname in ROUTE_TAB
+  useEffect(() => { if (!known) navigate('/', { replace: true }) }, [known, navigate])
   const setMainTab = (tab: Tab) => navigate(TAB_ROUTE[tab])
 
   const anyModalOpen = queueOpen || editingQueueIdx !== null || assignQueueIdx !== null || configOpen || editingMatch !== null || ledgerOpen
@@ -77,7 +81,6 @@ export function App() {
 
   const isAdmin = useIsAdmin()
   const captainTeam = useCaptainTeam()
-  const signedIn = useSignedIn()
   const isHistorical = selectedDate !== TODAY
 
   // Main state query — keyed by date so switching sessions re-fetches cleanly
@@ -335,15 +338,10 @@ export function App() {
           </button>
         </nav>
         <div className="sidebar-foot">
-          {signedIn
-            ? <button className="nav-item" style={{ color: 'var(--muted)' }}
-                onClick={() => supabase?.auth.signOut()} title="Keluar">
-                <Icon name="logout" /><span>Keluar</span>
-              </button>
-            : <button className="nav-item" style={{ color: 'var(--muted)' }}
-                onClick={() => window.dispatchEvent(new Event('open-admin-login'))} title="Login">
-                <Icon name="logout" /><span>Login</span>
-              </button>}
+          <button className="nav-item" style={{ color: 'var(--muted)' }}
+            onClick={() => supabase?.auth.signOut()} title="Keluar">
+            <Icon name="logout" /><span>Keluar</span>
+          </button>
         </div>
       </aside>
 
@@ -376,8 +374,8 @@ export function App() {
             </div>
             <button className="icon-btn" onClick={() => setLedgerOpen(true)} title="Live Ledger"><Icon name="wallet" /></button>
             {isAdmin && <button className="icon-btn" onClick={() => setConfigOpen(true)} title="Konfigurasi"><Icon name="gear" /></button>}
-            <button className="icon-btn sidebar-foot-mobile" title={signedIn ? 'Keluar' : 'Login'}
-              onClick={() => signedIn ? supabase?.auth.signOut() : window.dispatchEvent(new Event('open-admin-login'))}>
+            <button className="icon-btn sidebar-foot-mobile" title="Keluar"
+              onClick={() => supabase?.auth.signOut()}>
               <Icon name="logout" />
             </button>
             <button className="btn btn-primary new-match-btn" onClick={() => setQueueOpen(true)} disabled={!isAdmin}>

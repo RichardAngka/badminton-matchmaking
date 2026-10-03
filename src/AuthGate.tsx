@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Navigate, useLocation } from 'react-router-dom'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from './supabase'
 import { RoleCtx } from './RoleContext'
@@ -12,7 +13,6 @@ const CAPTAINS: Record<string, TeamId> = {
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null | undefined>(undefined)
-  const [showLogin, setShowLogin] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
@@ -20,6 +20,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState('')
   const [note, setNote] = useState('')
   const [loading, setLoading] = useState(false)
+  const { pathname } = useLocation()
 
   useEffect(() => {
     if (!supabase) { setSession(null); return }
@@ -28,23 +29,21 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe()
   }, [])
 
-  // ponytail: global DOM event avoids new context; upgrade to context if multiple triggers needed
-  useEffect(() => {
-    const h = () => setShowLogin(true)
-    window.addEventListener('open-admin-login', h)
-    return () => window.removeEventListener('open-admin-login', h)
-  }, [])
-
   if (session === undefined) return <div className="auth-loading">…</div>
 
   if (session) {
+    // Nothing left to log into; drop them at the dashboard.
+    if (pathname === '/login') return <Navigate to="/" replace />
     const role = {
       admin: session.user.user_metadata?.role === 'admin',
       team: CAPTAINS[session.user.email?.toLowerCase() ?? ''] ?? null,
-      signedIn: true,
     }
     return <RoleCtx.Provider value={role}>{children}</RoleCtx.Provider>
   }
+
+  // ponytail: always back to /login, no return-to; add a location-state hop if
+  // deep links into the tool ever get shared.
+  if (pathname !== '/login') return <Navigate to="/login" replace />
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -82,42 +81,81 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <RoleCtx.Provider value={{ admin: false, team: null, signedIn: false }}>
-      {children}
-      {showLogin && (
-        <div className="auth-gate" style={{ position: 'fixed', inset: 0, zIndex: 1000 }}>
-          <form className="auth-form" onSubmit={submit}>
-            <button
-              type="button"
-              onClick={() => setShowLogin(false)}
-              style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', color: 'var(--muted)', fontSize: 20, cursor: 'pointer' }}
-            >✕</button>
-            <div className="auth-logo">PB SOR</div>
-            <h2>{registering ? 'Daftar Kapten' : 'Login'}</h2>
-            <p className="auth-sub">
-              {registering ? 'Pakai email kapten tim Anda' : 'Admin & kapten tim'}
-            </p>
-            <input type="email" placeholder="Email" value={email}
-              onChange={e => setEmail(e.target.value)} required autoFocus />
-            <input type="password" autoComplete={registering ? 'new-password' : 'current-password'}
-              placeholder={registering ? 'Password baru' : 'Password'} value={password}
-              onChange={e => setPassword(e.target.value)} required />
-            {registering && (
-              <input type="password" autoComplete="new-password" placeholder="Ulangi password"
-                value={confirm} onChange={e => setConfirm(e.target.value)} required />
-            )}
-            {error && <p className="auth-error">{error}</p>}
-            {note && <p className="auth-note">{note}</p>}
-            <button type="submit" disabled={loading}>
-              {loading ? 'Memproses…' : registering ? 'Daftar' : 'Masuk'}
-            </button>
-            <button type="button" className="auth-swap"
-              onClick={() => { setRegistering(v => !v); setError(''); setNote(''); setConfirm('') }}>
-              {registering ? 'Sudah punya akun? Masuk' : 'Kapten tim, belum punya akun? Daftar'}
-            </button>
-          </form>
+    <div className="auth-page">
+      <header className="auth-bar">
+        <img src="/Logo PB SOR.png" alt="" />
+        <span className="auth-mark">PB SOR</span>
+      </header>
+
+      <main className="auth-main">
+        <div className="auth-lede">
+          <h1>{registering ? 'Password kapten' : 'Papan matchmaking'}</h1>
+          <p>
+            {registering
+              ? 'Pakai email kapten tim Anda, lalu buat password baru.'
+              : 'Masuk sebagai admin atau kapten tim.'}
+          </p>
         </div>
-      )}
-    </RoleCtx.Provider>
+
+        <div className="auth-crossing">
+      {/* 1 unit = 1 cm of a 6.10 × 13.40 m court: doubles boundary, singles
+              sidelines, long and short service lines, centre lines. No net — a net
+              is not a painted line, so the gold rule below plays that part. */}
+          <svg className="auth-court" viewBox="0 0 610 1340" aria-hidden="true">
+            <rect x="0" y="0" width="610" height="1340" />
+            <line x1="46" y1="0" x2="46" y2="1340" />
+            <line x1="564" y1="0" x2="564" y2="1340" />
+            <line x1="0" y1="76" x2="610" y2="76" />
+            <line x1="0" y1="472" x2="610" y2="472" />
+            <line x1="0" y1="868" x2="610" y2="868" />
+            <line x1="0" y1="1264" x2="610" y2="1264" />
+            <line x1="305" y1="0" x2="305" y2="472" />
+            <line x1="305" y1="868" x2="305" y2="1340" />
+          </svg>
+          <div className="auth-net" />
+        </div>
+
+        <form className="auth-form" onSubmit={submit}>
+          <div className="auth-field">
+            <label htmlFor="auth-email">Email</label>
+            <input id="auth-email" type="email" autoComplete="email" value={email}
+              onChange={e => setEmail(e.target.value)} required autoFocus />
+          </div>
+          {registering && (
+            <p className="auth-hint">
+              Email kapten: captain1@sor.com sampai captain4@sor.com.
+            </p>
+          )}
+          <div className="auth-field">
+            <label htmlFor="auth-password">{registering ? 'Password baru' : 'Password'}</label>
+            <input id="auth-password" type="password" value={password}
+              autoComplete={registering ? 'new-password' : 'current-password'}
+              onChange={e => setPassword(e.target.value)} required />
+          </div>
+          {registering && (
+            <div className="auth-field">
+              <label htmlFor="auth-confirm">Ulangi password</label>
+              <input id="auth-confirm" type="password" autoComplete="new-password"
+                value={confirm} onChange={e => setConfirm(e.target.value)} required />
+            </div>
+          )}
+          {error && <p className="auth-error" role="alert">{error}</p>}
+          {note && <p className="auth-note">{note}</p>}
+          <button type="submit" disabled={loading}>
+            {registering
+              ? (loading ? 'Menyimpan…' : 'Buat password')
+              : (loading ? 'Masuk…' : 'Masuk')}
+          </button>
+          <button type="button" className="auth-swap"
+            onClick={() => { setRegistering(v => !v); setError(''); setNote(''); setConfirm('') }}>
+            {registering ? 'Sudah punya akun? Masuk' : 'Kapten tim belum punya akun? Buat password'}
+          </button>
+        </form>
+      </main>
+
+      <footer className="auth-foot">
+        <a className="auth-home" href="/">Halaman utama PB SOR</a>
+      </footer>
+    </div>
   )
 }
