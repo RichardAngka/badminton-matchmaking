@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type {
-  Bracket, BracketKey, Day, PartaiResult, Score, Slot, TeamId, TourPlayer, TournamentState,
+  Bracket, BracketKey, Day, Extra, PartaiResult, Score, Slot, TeamId, TourPlayer, TournamentState,
 } from '../types'
 import {
   COURTS, DAY, EMPTY_BRACKET, LEVELS, LEVEL_CLASS, MAX_POINT, OTHER, PARTAI, SLOTS, WO,
-  elapsed, isHere, lineupOf, loadTournament, officials, partaiWinner, ready, resolve, setPartai,
-  setSlot,
+  elapsed, isHere, lineupOf, loadTournament, officials, partaiWinner, ready, resolve, setExtra,
+  setPartai, setSlot,
   tally,
 } from '../internalMatch'
 import { TOURNAMENT_ID, supabase, upsertTournament } from '../supabase'
@@ -113,6 +113,10 @@ export function InternalLineup() {
     ...cur,
     bracket: setPartai({ ...EMPTY_BRACKET, ...cur.bracket }, match, i, patch),
   }))
+  const editExtra = (patch: Partial<Extra>) => save(cur => ({
+    ...cur,
+    bracket: setExtra({ ...EMPTY_BRACKET, ...cur.bracket }, match, patch),
+  }))
   /**
    * Checks a player in for this match's day, writing the same players[].present
    * that /internal/absen writes — so it lands on that page, and on every other
@@ -183,7 +187,7 @@ export function InternalLineup() {
                   <button className="btn btn-ghost btn-sm"
                     onClick={() => exportPNG({
                       label, day, date: dayDate(b, day), sides, results, score,
-                      tiebreak: b.tiebreak?.[match],
+                      tiebreak: b.tiebreak?.[match], extra: b.extra?.[match],
                     })}>Unduh score sheet</button>
                 )}
               </div>
@@ -208,9 +212,93 @@ export function InternalLineup() {
                         clash={!!results[p]?.court && b.results?.[OTHER[match]]?.[p]?.court === results[p]?.court}
                         onPick={pick} onEdit={patch => editPartai(p, patch)} />
                     ))}
+                    {/* Only once the ten have split evenly — before that there
+                        is nothing to decide, and an empty card invites points
+                        that would not count. */}
+                    {(tied(score) || !!b.extra?.[match]) && (
+                      <ExtraCard x={b.extra?.[match]} sides={sides} isAdmin={isAdmin}
+                        onEdit={editExtra} />
+                    )}
                   </ol>}
           </>}
     </section>
+  )
+}
+
+/** 5–5: the ten partai split evenly, so an extra one decides the tie. */
+const tied = (s?: Score) => !!s && s[0] === s[1] && s[0] === PARTAI.length / 2
+
+/**
+ * The extra partai played at 5–5. It picks from the whole roster rather than
+ * the lineup: a team may put up any pair for it, so there is no slot, no grade
+ * and no WO — just four names and the points, which are the tie's result.
+ */
+function ExtraCard({ x, sides, isAdmin, onEdit }: {
+  x?: Extra
+  sides: Side[]
+  isAdmin: boolean
+  onEdit: (patch: Partial<Extra>) => void
+}) {
+  const won = partaiWinner(x)
+  const players = x?.players ?? []
+  const setPlayer = (i: number, v: string) => {
+    const next = [0, 1, 2, 3].map(j => (j === i ? v || null : players[j] ?? null))
+    onEdit({ players: next })
+  }
+  const setScore = (j: 0 | 1, n: number) => {
+    const other = x?.score?.[1 - j] ?? 0
+    onEdit({ score: (j === 0 ? [n, other] : [other, n]) as Score })
+  }
+  const group = (j: 0 | 1) => {
+    const s = sides[j]
+    return (
+      <div className={`lu-side${j ? ' b' : ''}${won === undefined ? '' : won === j ? ' won' : ' lost'}`}>
+        <div className="lu-side-h">
+          <span className="lu-side-team">{s.name}</span>
+          {won === j && <span className="lu-side-won">Menang</span>}
+          {isAdmin
+            ? <PointBox value={x?.score?.[j]} label={`Poin ${s.name} partai ekstra`}
+                onCommit={n => setScore(j, n)} />
+            : <span className="lu-side-pt">{x?.score?.[j] ?? '–'}</span>}
+        </div>
+        {[0, 1].map(k => {
+          const i = j * 2 + k
+          const v = players[i] ?? null
+          if (!isAdmin) {
+            return (
+              <div className="lu-row" key={k}>
+                <span className="lu-name">{s.members.find(m => m.id === v)?.name ?? '–'}</span>
+              </div>
+            )
+          }
+          return (
+            <div className="lu-row" key={k}>
+              <select className={`lu-sel${v ? '' : ' empty'}`} value={v ?? ''}
+                aria-label={`${s.name} pemain ${k + 1} partai ekstra`}
+                onChange={e => setPlayer(i, e.target.value)}>
+                <option value="">Belum dipilih</option>
+                {s.members.map(m => (
+                  <option key={m.id} value={m.id}>{m.name} ({m.level})</option>
+                ))}
+              </select>
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+  return (
+    <li className="lu-p">
+      <div className="lu-p-h">
+        <span className="lu-p-n">Partai ekstra</span>
+        <span className="lu-p-lap">Penentu 5–5</span>
+      </div>
+      <div className="lu-p-body">
+        {group(0)}
+        <div className="lu-net" aria-hidden />
+        {group(1)}
+      </div>
+    </li>
   )
 }
 
@@ -571,6 +659,7 @@ async function exportPNG(o: {
   results: PartaiResult[]
   score?: Score
   tiebreak?: TeamId
+  extra?: Extra
 }) {
   await document.fonts.ready  // Inter must be loaded or the canvas falls back
 
@@ -581,7 +670,7 @@ async function exportPNG(o: {
   const TOP = 154                                   // under the title block
   const TABLE = HEAD + PARTAI.length * ROW
   const SUM_Y = TOP + TABLE + 20, SUM_H = 104
-  const TIE_Y = SUM_Y + SUM_H + 34, TIE_H = 48      // label sits above the box
+  const TIE_Y = SUM_Y + SUM_H + 34, TIE_H = ROW     // label sits above the box
   const H = TIE_Y + TIE_H + PAD
   const SCALE = 2                                   // retina-sharp when zoomed on a phone
 
@@ -640,6 +729,21 @@ async function exportPNG(o: {
   const cell = (i: number) => (X[i] + X[i + 1]) / 2
   const rowsY = TOP + HEAD
 
+  // The winner's half of a row, washed grey. Laid down before the rules so the
+  // lines stay on top of it: courtside the ticks are small, and the eye should
+  // land on who won before it finds the right column.
+  const wash = (j: number, y: number, h: number) => {
+    g.fillStyle = '#ededed'
+    g.fillRect(j ? X[3] : X[0], y, j ? X[5] - X[3] : X[2] - X[0], h)
+    g.fillStyle = INK
+  }
+  PARTAI.forEach((_, p) => {
+    const w = partaiWinner(o.results[p])
+    if (w !== undefined) wash(w, rowsY + p * ROW, ROW)
+  })
+  const tieWon = o.sides.findIndex(s => s.team === o.tiebreak)
+  if (tieWon >= 0) wash(tieWon, TIE_Y, TIE_H)
+
   box(PAD, TOP, TW, TABLE)
   for (let i = 1; i <= 4; i++) rule(X[i], TOP, X[i], TOP + TABLE, 1.4)
   rule(PAD, rowsY, PAD + TW, rowsY, 1.8)
@@ -686,14 +790,24 @@ async function exportPNG(o: {
   mid('-', cx, SUM_SPLIT + 32, '500 22px Inter, sans-serif')
   mid(String(o.score?.[1] ?? ''), rx, SUM_SPLIT + 32, '800 38px Inter, sans-serif')
 
-  // ── Tie breaker: an empty row to fill by hand, ticked if one was played ──
+  // ── Tie breaker: the extra partai, or an empty row to fill by hand ──
   g.textAlign = 'left'
   g.font = '700 15px Inter, sans-serif'
   g.fillText('TIE BREAKER:', PAD, TIE_Y - 16)
   box(PAD, TIE_Y, TW, TIE_H)
   for (let i = 1; i <= 4; i++) rule(X[i], TIE_Y, X[i], TIE_Y + TIE_H, 1.4)
-  mid('-', cell(2), TIE_Y + TIE_H / 2, '500 18px Inter, sans-serif')
-  o.sides.forEach((s, j) => { if (o.tiebreak && o.tiebreak === s.team) tick(cell(j ? 3 : 1), TIE_Y + TIE_H / 2) })
+  o.sides.forEach((s, j) => {
+    rule(X[j ? 4 : 0], TIE_Y + LINE, X[j ? 5 : 1], TIE_Y + LINE, 0.7)
+    ;[0, 1].forEach(k => {
+      const m = s.members.find(x => x.id === o.extra?.players?.[j * 2 + k])
+      mid(m ? m.name.toUpperCase() : '', cell(j ? 4 : 0),
+        TIE_Y + LINE * k + LINE / 2, '600 15px Inter, sans-serif', NAME - 14)
+    })
+    if (o.tiebreak && o.tiebreak === s.team) tick(cell(j ? 3 : 1), TIE_Y + TIE_H / 2)
+  })
+  const xs = o.extra?.score
+  mid(xs ? `${xs[0]} - ${xs[1]}` : '-', cell(2), TIE_Y + TIE_H / 2,
+    xs ? '800 24px Inter, sans-serif' : '500 18px Inter, sans-serif')
 
   const a = document.createElement('a')
   a.href = canvas.toDataURL('image/png')

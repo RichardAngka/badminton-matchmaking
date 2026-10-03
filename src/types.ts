@@ -104,6 +104,15 @@ export interface Bracket {
   partai: Partial<Record<BracketKey, Score>>
   tiebreak: Partial<Record<BracketKey, TeamId>>  // extra-match winner, only read at 5–5
   results?: Partial<Record<BracketKey, PartaiResult[]>>  // one per partai, in PARTAI order
+  extra?: Partial<Record<BracketKey, Extra>>  // the 5-5 decider, if one was played
+}
+
+// The extra partai at 5-5. It carries its own four players rather than reading
+// the lineups: a team may put up any pair for it, not the one that played a
+// given partai. Ids are player ids in pair order: [a1, a2, b1, b2].
+export interface Extra {
+  players?: Slot[]
+  score?: Score
 }
 
 // ── Line-up (/internal/lineup) ───────────────────────────────────────────────

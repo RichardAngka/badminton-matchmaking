@@ -1,5 +1,5 @@
 import type {
-  Acara, Bracket, BracketKey, Day, Drag, Gender, PartaiResult, Rundown, Score, ShirtSize, Slot,
+  Acara, Bracket, BracketKey, Day, Drag, Extra, Gender, PartaiResult, Rundown, Score, ShirtSize, Slot,
   TeamId, TourLevel, TournamentState, TourPlayer,
 } from './types'
 import { fetchTournament, upsertTournament } from './supabase'
@@ -325,7 +325,8 @@ export function resolve(b: Bracket) {
   const w1 = win('sf1', sf1)
   const w2 = win('sf2', sf2)
   const final: Pair = [w1, w2]
-  const third: Pair = [lose(sf1, w1), lose(sf2, w2)]
+  // Listed lower team number first, the way the paper score sheet is printed.
+  const third = [lose(sf1, w1), lose(sf2, w2)].sort((a, b) => (a ?? 9) - (b ?? 9)) as Pair
   const pairs: Record<BracketKey, Pair> = { sf1, sf2, final, third }
   const winner: Record<BracketKey, TeamId | undefined> =
     { sf1: w1, sf2: w2, final: win('final', final), third: win('third', third) }
@@ -343,6 +344,7 @@ function clearStale(b: Bracket, next: Bracket): Bracket {
         partai: { ...next.partai, [d]: undefined },
         tiebreak: { ...next.tiebreak, [d]: undefined },
         results: { ...next.results, [d]: undefined },
+        extra: { ...next.extra, [d]: undefined },
       }
     }
   }
@@ -364,6 +366,18 @@ export function setPartai(
 /** The extra partai's winner, which only counts at 5–5. */
 export function setTiebreak(b: Bracket, k: BracketKey, t?: TeamId): Bracket {
   return clearStale(b, { ...b, tiebreak: { ...b.tiebreak, [k]: t } })
+}
+
+/**
+ * Edits the extra partai — who played it and the points. Its points are the
+ * tiebreak, so the decider is entered the same way every other partai is
+ * rather than also having to be ticked on the Bagan page.
+ */
+export function setExtra(b: Bracket, k: BracketKey, patch: Partial<Extra>): Bracket {
+  const extra: Extra = { ...b.extra?.[k], ...patch }
+  const w = partaiWinner(extra)
+  const tiebreak = w === undefined ? b.tiebreak[k] : resolve(b).pairs[k][w]
+  return { ...b, extra: { ...b.extra, [k]: extra }, tiebreak: { ...b.tiebreak, [k]: tiebreak } }
 }
 
 if (import.meta.env.DEV) {
@@ -390,7 +404,7 @@ if (import.meta.env.DEV) {
   b = won(b, 'third', 6)
   const r = resolve(b)
   console.assert(r.pairs.final.join() === '1,3', '[bracket] wrong finalists', r)
-  console.assert(r.pairs.third.join() === '4,2', '[bracket] third place is not the SF losers', r)
+  console.assert(r.pairs.third.join() === '2,4', '[bracket] third place is not the SF losers', r)
   console.assert(r.podium.join() === '3,1,4', '[bracket] wrong podium', r)
   console.assert(resolve(setPartai(b, 'sf1', 9, { score: [42, 0] })).podium.join() === '3,1,4',
     '[bracket] same SF winner should keep later results')
@@ -399,6 +413,16 @@ if (import.meta.env.DEV) {
   const flipped = setPartai(b, 'sf1', 0, { score: [0, 42] })  // 5–5: SF 1 has no winner now
   console.assert(flipped.results?.final === undefined && flipped.results?.third === undefined,
     '[bracket] new lineup kept a stale final / third-place result')
+  const extra = setExtra(b, 'final', { score: [36, 42] })  // final is 1 v 3
+  console.assert(extra.tiebreak.final === 3, '[bracket] extra partai points did not decide the tie')
+  console.assert(setPartai(extra, 'sf1', 0, { score: [0, 42] }).extra?.final === undefined,
+    '[bracket] new lineup kept a stale extra partai')
+  const level = setExtra(won(EMPTY_BRACKET, 'sf1', 5), 'sf1', { score: [36, 42] })
+  console.assert(tally(level, 'sf1')!.join() === '5,6', '[bracket] the decider did not count into the tie total',
+    tally(level, 'sf1'))
+  console.assert(resolve(level).winner.sf1 === 4, '[bracket] 5–6 after the decider should win')
+  console.assert(tally(setExtra(b, 'final', { score: [36, 42] }), 'final')!.join() === '4,6',
+    '[bracket] a decided tie counted a decider it never needed')
   console.assert(tally(EMPTY_BRACKET, 'sf1') === undefined, '[bracket] empty match should have no score')
   console.assert(tally({ ...EMPTY_BRACKET, partai: { sf1: [6, 4] } }, 'sf1')!.join() === '6,4',
     '[bracket] a hand-entered score should still be read')
@@ -469,6 +493,11 @@ export function tally(b: Bracket, k: BracketKey): Score | undefined {
     const w = partaiWinner(r)
     if (w !== undefined) out[w]++
   }
+  // The 5–5 decider is a partai like any other, so the tie total reads 5–6 —
+  // what the paper sheet's summary box ends up saying. Only counted while the
+  // ten are level: anything else has already been decided without it.
+  const x = out[0] === out[1] ? partaiWinner(b.extra?.[k]) : undefined
+  if (x !== undefined) out[x]++
   return out
 }
 
