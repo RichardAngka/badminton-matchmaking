@@ -46,6 +46,28 @@ const PHOTOS: Record<string, string> = {}
 const initials = (name: string) =>
   name.split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase()
 
+/** Climbs to n once, the moment the roster lands. */
+function useCountUp(n: number, ms = 1300) {
+  const [v, setV] = useState(0)
+  useEffect(() => {
+    // Nothing to climb to yet, and a reduced-motion visitor wants the number
+    // itself rather than the trip to it.
+    if (!n || STILL_ONLY) { setV(n); return }
+    let raf = 0
+    const t0 = performance.now()
+    const tick = (t: number) => {
+      const p = Math.min((t - t0) / ms, 1)
+      // Eased out, so it opens fast and settles on the last few — a flat ramp
+      // reads like a progress bar.
+      setV(Math.round(n * (1 - (1 - p) ** 3)))
+      if (p < 1) raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [n, ms])
+  return v
+}
+
 /** Adds .sx-in to each .sx-rise as it scrolls into view. */
 function useReveal(ready: boolean) {
   const root = useRef<HTMLDivElement>(null)
@@ -119,6 +141,15 @@ function Bar({ onRank }: { onRank: boolean }) {
   // Section anchors only exist on the home page, so from /rank they have to
   // carry the path with them.
   const at = (hash: string) => (onRank ? `/${hash}` : hash)
+  // One list, rendered twice: the bar on a wide screen, the menu on a narrow
+  // one. A second copy is how the two keep the same sections forever.
+  const links = (
+    <>
+      <a href={RANK_URL} aria-current={onRank ? 'page' : undefined}>Rankings</a>
+      <a href={at('#partners')}>Partners</a>
+      <a href={at('#sponsorship')}>Sponsorship</a>
+    </>
+  )
   return (
     <header className="sx-bar">
       <div className="sx-bar-in">
@@ -126,12 +157,23 @@ function Bar({ onRank }: { onRank: boolean }) {
           <img src="/Logo PB SOR.png" alt="" />
           <span>PB SOR</span>
         </a>
-        <nav className="sx-nav">
-          <a href={RANK_URL} aria-current={onRank ? 'page' : undefined}>Rankings</a>
-          <a href={at('#partners')}>Partners</a>
-          <a href={at('#sponsorship')}>Sponsorship</a>
-        </nav>
+        <nav className="sx-nav">{links}</nav>
         <a className="sx-bar-cta" href={IG} target="_blank" rel="noreferrer">Instagram</a>
+
+        {/* ponytail: <details> is the platform's own disclosure widget — open
+            state, the Escape-free toggle, keyboard and screen-reader semantics,
+            all without a line of state. Tapping a link closes it; tapping away
+            does not, and the toggle sits right there. */}
+        <details className="sx-menu">
+          <summary aria-label="Menu"><span /><span /></summary>
+          <nav
+            className="sx-menu-panel"
+            onClick={e => { (e.currentTarget.parentElement as HTMLDetailsElement).open = false }}
+          >
+            {links}
+            <a className="sx-menu-ig" href={IG} target="_blank" rel="noreferrer">Instagram</a>
+          </nav>
+        </details>
       </div>
     </header>
   )
@@ -209,6 +251,7 @@ export function SecretLanding() {
   const root = useReveal(Boolean(state))
 
   const players = (state?.players ?? []).filter(p => !p.external)
+  const counted = useCountUp(players.length)
   const seed = (p: TourPlayer) => LEVELS.indexOf(p.level)
   // Lowest squad number first; ponytail: numberless players sort last rather
   // than at the top, which is what 0 would do.
@@ -309,7 +352,7 @@ export function SecretLanding() {
           <p className="sx-tag">#SORCARIKERINGAT</p>
 
           <p className="sx-count">
-            <span><b>{players.length}</b> ranked players.</span>
+            <span><b>{counted}</b> ranked players.</span>
             <span>Seven tiers.</span>
             <span>One ladder.</span>
           </p>
