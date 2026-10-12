@@ -37,8 +37,8 @@ function exportXLSX(state: TournamentState) {
 
 // Mirrors the .lvl-* badge colours in App.css — canvas can't read CSS classes.
 export const LEVEL_COLOR: Record<TourLevel, string> = {
-  'A1+': '#FFB020', A1: '#FFCD5C', A2: '#60A5FA', B1: '#00C876',
-  B2: '#F472B6', 'W-B1': '#C084FC', 'W-B2': '#F9A8D4',
+  'A1+': '#D4AF37', A1: '#F4E5A8', A2: '#D4AF37', B1: '#FAFAF8',
+  B2: 'rgba(250,250,248,0.72)', 'W-B1': '#D9A1AE', 'W-B2': '#D9A1AE',
 }
 
 /** The four rosters side by side as one image, for the group chat. */
@@ -59,21 +59,21 @@ async function exportPNG(state: TournamentState) {
   const g = canvas.getContext('2d')!
   g.scale(SCALE, SCALE)
   g.textBaseline = 'middle'
-  g.fillStyle = '#0e0e0e'
+  g.fillStyle = '#05070C'
   g.fillRect(0, 0, W, H)
 
-  g.fillStyle = '#e5e2e1'
+  g.fillStyle = '#FAFAF8'
   g.font = '800 22px Inter, sans-serif'
   g.fillText('Internal Match · Tim', PAD, PAD + 14)
 
   teams.forEach((t, i) => {
     const x = PAD + i * (COL + GAP)
     let y = TITLE
-    g.fillStyle = '#131313'
+    g.fillStyle = '#0C1426'
     g.fillRect(x, y, COL, H - y - PAD)
-    g.fillStyle = '#adc7ff'
+    g.fillStyle = '#D4AF37'
     g.fillRect(x, y, COL, HEAD)
-    g.fillStyle = '#0A0800'
+    g.fillStyle = '#10100A'
     g.font = '800 16px Inter, sans-serif'
     g.fillText(t.name, x + 12, y + HEAD / 2, COL - 70)
     g.textAlign = 'right'
@@ -87,7 +87,7 @@ async function exportPNG(state: TournamentState) {
       g.font = '800 11px Inter, sans-serif'
       g.fillText(level, x + 12, y + LVL / 2)
       y += LVL
-      g.fillStyle = '#e5e2e1'
+      g.fillStyle = '#FAFAF8'
       g.font = '600 14px Inter, sans-serif'
       for (const p of players) {
         // maxWidth squeezes an overlong name instead of spilling into the next column
@@ -334,9 +334,11 @@ export function InternalMatch() {
         {isAdmin && (
           <div className="im-controls">
             <button className="btn btn-ghost btn-sm" disabled={roster.every(p => p.team === null)}
-              onClick={() => exportXLSX(state)}>Export Excel</button>
+              title={roster.every(p => p.team === null) ? 'Bagi pemain ke tim dulu.' : undefined}
+              onClick={() => exportXLSX(state)}>Unduh Excel</button>
             <button className="btn btn-ghost btn-sm" disabled={roster.every(p => p.team === null)}
-              onClick={() => exportPNG(state)}>Export PNG</button>
+              title={roster.every(p => p.team === null) ? 'Bagi pemain ke tim dulu.' : undefined}
+              onClick={() => exportPNG(state)}>Unduh gambar</button>
           </div>
         )}
 
@@ -446,8 +448,10 @@ function PlayerRow({ p, isAdmin, editing, onEdit, onPatch, onRemove, onTeam, onC
             <option value="M">Putra</option>
             <option value="F">Putri</option>
           </select>
-          <button className="im-mini danger" onClick={onRemove} title="Hapus">✕</button>
-          <button className="im-mini" onClick={onEdit} title="Selesai">✓</button>
+          <button className="im-mini danger" onClick={onRemove}
+            aria-label={`Hapus ${p.name}`} title="Hapus pemain ini">✕</button>
+          <button className="im-mini" onClick={onEdit}
+            aria-label="Selesai mengubah" title="Selesai mengubah">✓</button>
         </>
       ) : (
         <>
@@ -466,12 +470,16 @@ function PlayerRow({ p, isAdmin, editing, onEdit, onPatch, onRemove, onTeam, onC
                 {TEAM_IDS.map(t => (
                   <button key={t}
                     className={`im-tbtn${p.team === t ? ' on' : ''}`}
+                    aria-pressed={p.team === t}
+                    aria-label={`Masukkan ${p.name} ke tim ${t}`} title={`Tim ${t}`}
                     onClick={() => onTeam(t)}>{t}</button>
                 ))}
                 <button className="im-tbtn clear" disabled={p.team === null}
-                  onClick={() => onTeam(null)} title="Keluarkan dari tim">–</button>
+                  aria-label={`Keluarkan ${p.name} dari tim`} title="Keluarkan dari tim"
+                  onClick={() => onTeam(null)}>–</button>
               </div>
-              <button className="im-mini" onClick={onEdit} title="Ubah">✎</button>
+              <button className="im-mini" onClick={onEdit}
+                aria-label={`Ubah data ${p.name}`} title="Ubah data pemain">✎</button>
             </>
           )}
         </>

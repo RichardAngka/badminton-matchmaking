@@ -265,7 +265,8 @@ export function InternalPlayers() {
                         ) : (
                           p.number ?? '—'
                         )}
-                        {dup && <span className="ip-dup" title="Nomor ganda">⚠</span>}
+                        {dup && <span className="ip-dup" role="img" aria-label="Nomor punggung ini dipakai dua pemain"
+                          title="Nomor punggung ini dipakai dua pemain">⚠</span>}
                       </td>
                       <td className="ip-jersey">
                         {isAdmin ? (

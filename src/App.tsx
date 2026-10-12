@@ -19,6 +19,7 @@ import { InternalAbsen } from './components/InternalAbsen'
 import { InternalRundown } from './components/InternalRundown'
 import { matchCostByPlayer, playerTotal } from './ledgerMath'
 import { useCaptainTeam, useIsAdmin } from './RoleContext'
+import { clickable, useDialog } from './ui'
 
 const INTERNAL_TABS: [string, string][] = [
   ['/internal-match', 'Tim'],
@@ -218,7 +219,7 @@ export function App() {
 
   function deleteMatch(matchId: string) {
     if (!isAdmin) return
-    if (!confirm('Hapus match ini? Biaya shuttle akan dikembalikan.')) return
+    if (!confirm('Hapus match ini? Biaya bola dikembalikan ke keempat pemain dan jumlah main mereka turun satu.')) return
     const match = state.matches.find(m => m.id === matchId)!
     const cost = Math.round(((match.shuttlesUsed ?? 0) * state.shuttlePrice) / 4)
     const playerIds = new Set([...match.team1, ...match.team2])
@@ -235,7 +236,7 @@ export function App() {
 
   function cancelMatch(matchId: string) {
     if (isHistorical || !isAdmin) return
-    if (!confirm('Batalkan match ini? Pemain akan kembali ke status menunggu.')) return
+    if (!confirm('Batalkan match ini? Keempat pemain kembali menunggu dan tidak dihitung main.')) return
     const match = state.matches.find(m => m.id === matchId)!
     const playerIds = new Set([...match.team1, ...match.team2])
     mut.mutate({
@@ -287,12 +288,12 @@ export function App() {
   const finished = state.matches.filter(m => m.endTime)
   const fmtDate = `${selectedDate.slice(8)}/${selectedDate.slice(5,7)}/${selectedDate.slice(2,4)}`
   const TAB_META: Record<typeof mainTab, { title: string; sub: string }> = {
-    lapangan: { title: 'Dashboard', sub: 'Lapangan aktif & aktivitas terkini' },
-    menunggu: { title: 'Menunggu', sub: 'Pemain siap masuk antrian' },
-    antrian:  { title: 'Antrian', sub: 'Match yang sudah disusun' },
-    riwayat:  { title: 'Riwayat', sub: 'Pertandingan selesai hari ini' },
-    pemain:   { title: 'Pemain', sub: 'Kelola pemain & check-in' },
-    internal: { title: 'Internal Match', sub: 'Turnamen internal — 80 pemain, 4 tim' },
+    lapangan: { title: 'Papan Main', sub: 'Lapangan yang jalan dan match yang baru selesai' },
+    menunggu: { title: 'Menunggu', sub: 'Pemain yang siap masuk antrian' },
+    antrian:  { title: 'Antrian', sub: 'Match yang sudah disusun, belum jalan' },
+    riwayat:  { title: 'Riwayat', sub: 'Match yang selesai hari ini' },
+    pemain:   { title: 'Pemain', sub: 'Check-in, check-out, dan data pemain' },
+    internal: { title: 'Internal', sub: 'Turnamen internal — 80 pemain, 4 tim' },
   }
   const meta = TAB_META[mainTab]
   const nm = (id: string) => state.players.find(p => p.id === id)?.name ?? '?'
@@ -314,7 +315,7 @@ export function App() {
         </div>
         <nav className="sidebar-nav">
           <button className={`nav-item${mainTab === 'lapangan' ? ' active' : ''}`} onClick={() => setMainTab('lapangan')}>
-            <Icon name="grid" /><span>Dashboard</span>
+            <Icon name="grid" /><span>Papan Main</span>
             {activeMatchMap.size > 0 && <span className="nav-count">{activeMatchMap.size}</span>}
           </button>
           <button className={`nav-item${mainTab === 'menunggu' ? ' active' : ''}`} onClick={() => setMainTab('menunggu')}>
@@ -332,9 +333,6 @@ export function App() {
           <button className={`nav-item${mainTab === 'pemain' ? ' active' : ''}`} onClick={() => setMainTab('pemain')}>
             <Icon name="users" /><span>Pemain</span>
             {state.players.filter(p => p.status !== 'Left').length > 0 && <span className="nav-count">{state.players.filter(p => p.status !== 'Left').length}</span>}
-          </button>
-          <button className={`nav-item${mainTab === 'internal' ? ' active' : ''}`} onClick={() => setMainTab('internal')}>
-            <Icon name="trophy" /><span>Internal Match</span>
           </button>
         </nav>
         <div className="sidebar-foot">
@@ -354,45 +352,70 @@ export function App() {
           </div>
           <div className="topbar-actions">
             <div style={{ position: 'relative' }}>
-              <button className="chip-btn" onClick={() => setPickingDate(true)}>
-                📅 <span className="full-date">{fmtDate}{selectedDate === TODAY ? ' ✦' : ''}</span>
+              <button className="chip-btn" onClick={() => setPickingDate(true)}
+                aria-label="Pilih tanggal sesi" aria-expanded={pickingDate}>
+                <Icon name="calendar" />
+                <span className="full-date">{selectedDate === TODAY ? 'Hari ini' : fmtDate}</span>
               </button>
               {pickingDate && (
                 <CalendarPicker value={selectedDate} onSelect={setSelectedDate} onClose={() => setPickingDate(false)} />
               )}
             </div>
-            <div className="player-count-badge" style={{ cursor: 'pointer' }} onClick={() => setMainTab('pemain')}>
+            <div className="player-count-badge" title="Lihat daftar pemain"
+              aria-label={`${activePlayers} dari ${state.targetPlayers} pemain hadir. Lihat daftar pemain.`}
+              {...clickable(() => setMainTab('pemain'))}>
               <strong>{activePlayers}</strong> / {state.targetPlayers}
             </div>
-            <div className="db-badge" title={
-              !supabase ? 'Supabase tidak dikonfigurasi' :
-              dbStatus === 'error' ? 'Gagal terhubung ke Supabase' :
-              dbStatus === 'success' ? 'Terhubung ke Supabase' : 'Menghubungkan…'
-            }>
-              <div className={`db-dot ${!supabase || dbStatus === 'error' ? 'off' : dbStatus === 'success' ? 'on' : 'pending'}`} />
-              {!supabase ? 'Local' : dbStatus === 'error' ? 'DB ✗' : dbStatus === 'success' ? 'DB' : 'DB…'}
-            </div>
-            <button className="icon-btn" onClick={() => setLedgerOpen(true)} title="Live Ledger"><Icon name="wallet" /></button>
-            {isAdmin && <button className="icon-btn" onClick={() => setConfigOpen(true)} title="Konfigurasi"><Icon name="gear" /></button>}
-            <button className="icon-btn sidebar-foot-mobile" title="Keluar"
+            <SaveStatus
+              failed={mut.isError}
+              saving={mut.isPending}
+              onRetry={() => mut.variables && mut.mutate(mut.variables)}
+              connected={!supabase ? 'local' : dbStatus === 'error' ? 'off' : dbStatus === 'success' ? 'on' : 'pending'}
+            />
+            <button className="icon-btn" onClick={() => setLedgerOpen(true)}
+              aria-label="Buka kas hari ini" title="Kas hari ini"><Icon name="wallet" /></button>
+            {isAdmin && <button className="icon-btn" onClick={() => setConfigOpen(true)}
+              aria-label="Buka konfigurasi sesi" title="Konfigurasi sesi"><Icon name="gear" /></button>}
+            <button className="icon-btn sidebar-foot-mobile" aria-label="Keluar" title="Keluar"
               onClick={() => supabase?.auth.signOut()}>
               <Icon name="logout" />
             </button>
-            <button className="btn btn-primary new-match-btn" onClick={() => setQueueOpen(true)} disabled={!isAdmin}>
-              <Icon name="plus" /> New Match
-            </button>
+            {/* A button that can never be enabled is noise, so captains and
+                viewers simply do not see it. */}
+            {isAdmin && (
+              <button className="btn btn-ghost new-match-btn" onClick={() => setQueueOpen(true)}>
+                <Icon name="plus" /> Match baru
+              </button>
+            )}
           </div>
         </header>
 
         <div className="workspace-body">
+          {/* Looking at a past date changes what every button does, so say so
+              once at the top and put the way back right next to it. */}
+          {isHistorical && (
+            <div className="notice">
+              <span>
+                Ini sesi {fmtDate}.{' '}
+                {isAdmin ? 'Yang Anda ubah tersimpan ke tanggal itu, bukan ke hari ini.' : 'Hanya bisa dilihat.'}
+              </span>
+              <button className="btn btn-ghost btn-sm" onClick={() => setSelectedDate(TODAY)}>
+                Kembali ke hari ini
+              </button>
+            </div>
+          )}
+
           {isAdmin && (mainTab === 'lapangan' || mainTab === 'antrian') && (
             <div className="controls-bar">
               <button
-                className="btn btn-primary btn-sm"
+                className="btn btn-ghost btn-sm"
                 onClick={generateOneToQueue}
                 disabled={availableForQueue.length < 4}
+                title={availableForQueue.length < 4
+                  ? `Perlu 4 pemain yang belum diantrikan — baru ada ${availableForQueue.length}.`
+                  : 'Pilih empat pemain yang paling lama menunggu dan antrikan'}
               >
-                ⚡ Antri Otomatis
+                <Icon name="bolt" /> Susun otomatis
               </button>
               {slot && (
                 <div className="slot-tag">
@@ -408,10 +431,10 @@ export function App() {
             <section className="ws-section">
               <div className="ws-head">
                 <div className="ws-head-l">
-                  <h2>Active Courts</h2>
-                  <span className="ws-head-sub">Live matches in progress</span>
+                  <h2>Lapangan</h2>
+                  <span className="ws-head-sub">Yang sedang jalan</span>
                 </div>
-                <span className="ws-pill">{activeMatchMap.size} / {activeCourts} aktif</span>
+                <span className="ws-pill"><strong>{activeMatchMap.size}</strong> dari {activeCourts} terpakai</span>
               </div>
               <div className="courts-grid">
                 {(() => {
@@ -438,6 +461,7 @@ export function App() {
                         upcoming={upcoming}
                         onEndMatch={isAdmin ? endMatch : undefined}
                         onEditPlayers={isAdmin ? editMatchPlayers : undefined}
+                        onCancelMatch={(isAdmin && !isHistorical) ? cancelMatch : undefined}
                         onStart={(isAdmin && capturedIdx !== undefined) ? () => startFromQueue(capturedIdx, courtId) : undefined}
                       />
                     )
@@ -449,24 +473,25 @@ export function App() {
             <section className="ws-section">
               <div className="ws-head">
                 <div className="ws-head-l">
-                  <h2>Recent Activity</h2>
-                  <span className="ws-head-sub">Match terakhir yang selesai</span>
+                  <h2>Baru Selesai</h2>
+                  <span className="ws-head-sub">Lima match terakhir</span>
                 </div>
               </div>
               {finished.length === 0 ? (
-                <div className="activity-empty">Belum ada match selesai.<br />Mulai dari Lapangan, lalu isi bola &amp; skor lalu klik <strong>Selesai</strong>.</div>
+                <div className="activity-empty">Belum ada match yang selesai hari ini.<br />Mulai satu dari Lapangan, lalu isi bola dan skor untuk menutupnya.</div>
               ) : (
                 <div className="activity-list">
                   {[...finished].sort((a, b) => b.matchNumber - a.matchNumber).slice(0, 5).map(m => (
                     <div key={m.id} className="activity-row"
-                      onClick={() => isAdmin && setEditingMatch({ id: m.id, bola: m.shuttlesUsed ?? 0, scoreL: (m.score ?? '').split('-')[0] ?? '', scoreR: (m.score ?? '').split('-')[1] ?? '' })}>
+                      title={isAdmin ? `Ubah bola dan skor match #${m.matchNumber}` : undefined}
+                      {...clickable(isAdmin && (() => setEditingMatch({ id: m.id, bola: m.shuttlesUsed ?? 0, scoreL: (m.score ?? '').split('-')[0] ?? '', scoreR: (m.score ?? '').split('-')[1] ?? '' })))}>
                       <div className="activity-icon"><Icon name="flag" /></div>
                       <div className="activity-main">
-                        <div className="activity-title">Match #{m.matchNumber}<span style={{ color: 'var(--dim)', fontWeight: 500 }}>· Court {m.courtId}</span>{m.endTime && <span className="match-timer">{fmtDur(m.endTime - m.startTime)}</span>}</div>
-                        <div className="activity-meta">{nm(m.team1[0])} · {nm(m.team1[1])}　vs　{nm(m.team2[0])} · {nm(m.team2[1])}</div>
+                        <div className="activity-title">Match #{m.matchNumber}<span style={{ color: 'var(--dim)', fontWeight: 400 }}>Lapangan {m.courtId}</span>{m.endTime && <span className="match-timer">{fmtDur(m.endTime - m.startTime)}</span>}</div>
+                        <div className="activity-meta">{nm(m.team1[0])}/{nm(m.team1[1])} <span style={{ color: 'var(--dim)' }}>vs</span> {nm(m.team2[0])}/{nm(m.team2[1])}</div>
                       </div>
                       {m.score
-                        ? <div className="activity-score">{m.score}</div>
+                        ? <div className="activity-score">{m.score.replace('-', '–')}</div>
                         : <div className="activity-score" style={{ color: 'var(--dim)', fontSize: 13 }}>{m.shuttlesUsed ?? 0} bola</div>}
                     </div>
                   ))}
@@ -477,13 +502,13 @@ export function App() {
           )}
 
           {mainTab === 'menunggu' && waitingPlayers.length === 0 && (
-            <div className="activity-empty">Belum ada pemain menunggu.<br />Tambah pemain lewat menu <strong>Pemain</strong>.</div>
+            <div className="activity-empty">Belum ada pemain yang menunggu.<br />Tambah pemain lewat menu Pemain.</div>
           )}
 
           {mainTab === 'menunggu' && waitingPlayers.length > 0 && (
             <div className="waiting-section">
               <div className="section-title">
-                <span>Antrian Menunggu</span>
+                <span>Antrian menunggu</span>
                 <span>{waitingPlayers.length} pemain</span>
               </div>
               {(waitingInQueue.length > 0 || waitingQueued.length > 0) && (
@@ -492,12 +517,19 @@ export function App() {
                     <button
                       className={`btn btn-sm${waitingTab === 'menunggu' ? ' btn-primary' : ' btn-ghost'}`}
                       onClick={() => setWaitingTab('menunggu')}
-                    >Menunggu ({waitingInQueue.length})</button>
+                    >Siap main ({waitingInQueue.length})</button>
                     <button
                       className={`btn btn-sm${waitingTab === 'antrian' ? ' btn-primary' : ' btn-ghost'}`}
                       onClick={() => setWaitingTab('antrian')}
-                    >Sedang Dalam Antrian ({waitingQueued.length})</button>
+                    >Sudah diantrikan ({waitingQueued.length})</button>
                   </div>
+                  {(waitingTab === 'menunggu' ? waitingInQueue : waitingQueued).length === 0 && (
+                    <div className="activity-empty">
+                      {waitingTab === 'menunggu'
+                        ? 'Semua pemain yang sudah main sedang diantrikan.'
+                        : 'Belum ada pemain yang diantrikan.'}
+                    </div>
+                  )}
                   <div className="waiting-grid">
                     {(waitingTab === 'menunggu' ? waitingInQueue : waitingQueued).map(p => (
                       <div key={p.id} className="waiting-chip">
@@ -512,7 +544,7 @@ export function App() {
               )}
               {waitingNotYet.length > 0 && (
                 <>
-                  <div className="waiting-sub-label">Belum Main</div>
+                  <div className="waiting-sub-label">Belum main</div>
                   <div className="waiting-grid">
                     {waitingNotYet.map(p => (
                       <div key={p.id} className="waiting-chip">
@@ -528,10 +560,30 @@ export function App() {
             </div>
           )}
 
+          {mainTab === 'antrian' && (state.pregenerated ?? []).length === 0 && (
+            <div className="activity-empty">
+              Antrian masih kosong.<br />
+              {isAdmin
+                ? 'Susun satu match otomatis, atau pilih pemainnya sendiri.'
+                : 'Admin belum menyusun match berikutnya.'}
+              {isAdmin && (
+                <div className="empty-actions">
+                  <button className="btn btn-primary btn-sm" onClick={() => setQueueOpen(true)}>
+                    Pilih pemain sendiri
+                  </button>
+                  <button className="btn btn-ghost btn-sm" onClick={generateOneToQueue}
+                    disabled={availableForQueue.length < 4}>
+                    Susun otomatis
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
           {mainTab === 'antrian' && (state.pregenerated ?? []).length > 0 && (
             <div className="waiting-section" style={{ marginTop: 12 }}>
               <div className="section-title">
-                <span>Antrian Match</span>
+                <span>Antrian match</span>
                 <span>{(state.pregenerated ?? []).length} antrian</span>
               </div>
               <div className="match-history-grid">
@@ -539,28 +591,38 @@ export function App() {
                   const n = (id: string) => state.players.find(p => p.id === id)?.name ?? '?'
                   const allReady = four.every(id => state.players.find(p => p.id === id)?.status === 'Waiting')
                   return (
-                    <div key={idx} className="mh-card" style={{ borderLeft: '3px solid var(--gold)', cursor: isAdmin ? 'pointer' : undefined }}
-                      onClick={() => isAdmin && setEditingQueueIdx(idx)}>
+                    <div key={idx} className="mh-card" style={{ borderLeft: '3px solid var(--gold)' }}
+                      title={isAdmin ? `Ganti pemain di antrian #${idx + 1}` : undefined}
+                      {...clickable(isAdmin && (() => setEditingQueueIdx(idx)))}>
                       <div className="mh-card-header">
                         <span className="mh-num">#{idx + 1}</span>
                         {isAdmin && (
-                          <button onClick={e => { e.stopPropagation(); removeFromQueue(idx) }}
-                            style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: 13, padding: '0 2px', lineHeight: 1 }}>✕</button>
+                          <button className="mh-remove" aria-label={`Buang antrian #${idx + 1}`}
+                            title="Buang dari antrian"
+                            onClick={e => { e.stopPropagation(); removeFromQueue(idx) }}>✕</button>
                         )}
                       </div>
-                      <div className="mh-team" style={{ color: 'var(--gold)' }}>{n(four[0])} · {n(four[1])}</div>
+                      <div className="mh-team">{n(four[0])} / {n(four[1])}</div>
                       <div className="mh-vs">vs</div>
-                      <div className="mh-team" style={{ color: '#4fc3f7' }}>{n(four[2])} · {n(four[3])}</div>
+                      <div className="mh-team">{n(four[2])} / {n(four[3])}</div>
                       {isAdmin && (
-                        <div style={{ display: 'flex', gap: 4, marginTop: 6 }} onClick={e => e.stopPropagation()}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }} onClick={e => e.stopPropagation()}>
                           <button
                             className="btn btn-primary btn-sm"
-                            style={{ flex: 1, fontSize: 10 }}
+                            style={{ flex: 1 }}
                             disabled={!allReady || freeCourts.length === 0}
+                            title={!allReady ? 'Ada pemain di antrian ini yang masih main.'
+                              : freeCourts.length === 0 ? 'Semua lapangan sedang terpakai.'
+                              : 'Mulai match ini'}
                             onClick={() => freeCourts.length === 1 ? startFromQueue(idx, freeCourts[0]) : setAssignQueueIdx(idx)}
                           >
-                            📍 Mulai di Lapangan
+                            Mulai match
                           </button>
+                          {(!allReady || freeCourts.length === 0) && (
+                            <p className="mh-blocked">
+                              {!allReady ? 'Pemain masih main' : 'Lapangan penuh'}
+                            </p>
+                          )}
                         </div>
                       )}
                     </div>
@@ -570,10 +632,19 @@ export function App() {
             </div>
           )}
 
+          {mainTab === 'riwayat' && !state.matches.some(m => m.endTime) && (
+            <div className="activity-empty">
+              {isHistorical
+                ? `Tidak ada match yang selesai pada ${fmtDate}.`
+                : 'Belum ada match yang selesai hari ini.'}<br />
+              Match pindah ke sini begitu bola dan skornya diisi di Papan Main.
+            </div>
+          )}
+
           {mainTab === 'riwayat' && state.matches.some(m => m.endTime) && (
             <div className="waiting-section" style={{ marginTop: 12 }}>
               <div className="section-title">
-                <span>Riwayat Match</span>
+                <span>Riwayat match</span>
                 <span>{state.matches.filter(m => m.endTime).length} match</span>
               </div>
               <div className="match-history-grid">
@@ -587,15 +658,16 @@ export function App() {
                     const n1 = parseInt(s1 ?? '0'), n2 = parseInt(s2 ?? '0')
                     return (
                       <div key={m.id} className="mh-card"
-                        style={{ borderLeft: `3px solid ${TYPE_COLOR[t1t]}`, ...(isAdmin ? { cursor: 'pointer' } : {}) }}
-                        onClick={() => isAdmin && setEditingMatch({ id: m.id, bola: m.shuttlesUsed ?? 0, scoreL: s1 ?? '', scoreR: s2 ?? '' })}
+                        style={{ borderLeft: `3px solid ${TYPE_COLOR[t1t]}` }}
+                        title={isAdmin ? `Ubah bola dan skor match #${m.matchNumber}` : undefined}
+                        {...clickable(isAdmin && (() => setEditingMatch({ id: m.id, bola: m.shuttlesUsed ?? 0, scoreL: s1 ?? '', scoreR: s2 ?? '' })))}
                       >
                         <div className="mh-card-header">
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                             <span className="mh-num">#{m.matchNumber}</span>
                             <span style={{ fontSize: 10, fontWeight: 700, color: TYPE_COLOR[t1t], background: 'var(--bg)', padding: '1px 6px', borderRadius: 3 }}>{t1t}</span>
                           </div>
-                          <span className="mh-status">✓ Selesai{isAdmin && ` · ${m.shuttlesUsed ?? 0} bola ✏`}{m.endTime && <span className="match-timer" style={{ marginLeft: 6 }}>{fmtDur(m.endTime - m.startTime)}</span>}</span>
+                          <span className="mh-status">{m.shuttlesUsed ?? 0} bola{m.endTime && <span className="match-timer" style={{ marginLeft: 6 }}>{fmtDur(m.endTime - m.startTime)}</span>}</span>
                         </div>
                         <div className="mh-body">
                           <div className="mh-team-col">
@@ -605,9 +677,9 @@ export function App() {
                             <div className="mh-score-vs">vs</div>
                             {m.score ? (
                               <div className="mh-score-line">
-                                <div className="mh-score-num" style={{ color: n1 >= n2 ? 'var(--text)' : 'var(--gold)' }}>{s1}</div>
+                                <div className="mh-score-num" style={{ color: n1 >= n2 ? 'var(--text)' : 'var(--dim)' }}>{s1}</div>
                                 <div className="mh-score-dash">—</div>
-                                <div className="mh-score-num" style={{ color: n2 > n1 ? 'var(--text)' : 'var(--gold)' }}>{s2}</div>
+                                <div className="mh-score-num" style={{ color: n2 >= n1 ? 'var(--text)' : 'var(--dim)' }}>{s2}</div>
                               </div>
                             ) : <div style={{ color: 'var(--dim)', fontSize: 13 }}>—</div>}
                           </div>
@@ -703,7 +775,7 @@ export function App() {
         <AddToQueueModal
           state={state}
           initialSelected={(state.pregenerated ?? [])[editingQueueIdx] ?? []}
-          submitLabel="Simpan Antrian"
+          submitLabel="Simpan antrian"
           onSubmit={four => { replaceInQueue(editingQueueIdx, four); setEditingQueueIdx(null) }}
           onClose={() => setEditingQueueIdx(null)}
         />
@@ -741,7 +813,7 @@ function MasterPool({ players, onAdd }: { players: Player[]; onAdd: () => void }
   return (
     <div className="rail-card">
       <div className="rail-card-head">
-        <h3>Master Pool</h3>
+        <h3>Daftar Pemain</h3>
         <span className="rail-count">{active.length} pemain</span>
       </div>
       <div className="rail-pool-list">
@@ -758,7 +830,7 @@ function MasterPool({ players, onAdd }: { players: Player[]; onAdd: () => void }
             </div>
           ))}
       </div>
-      <button className="btn btn-ghost btn-sm rail-add" onClick={onAdd}>+ Tambah Pemain</button>
+      <button className="btn btn-ghost btn-sm rail-add" onClick={onAdd}>Tambah pemain</button>
     </div>
   )
 }
@@ -772,21 +844,56 @@ function LedgerCard({ state, onViewAll }: { state: AppState; onViewAll: () => vo
   return (
     <div className="rail-card">
       <div className="rail-card-head">
-        <h3>Live Ledger</h3>
+        <h3>Kas Hari Ini</h3>
         <span className="rail-count">{totalShuttles} bola</span>
       </div>
       <div className="ledger-card-total">
-        <span>Total Outstanding</span>
+        <span>Belum dibayar</span>
         <strong>{rp(totalCost)}</strong>
       </div>
       <div className="ledger-card-rows">
         {rows.length === 0
-          ? <div className="rail-empty">Belum ada transaksi.</div>
+          ? <div className="rail-empty">Belum ada yang perlu dibayar.</div>
           : rows.map(p => (
             <div key={p.id} className="ledger-card-row"><span>{p.name}</span><span className="lc-amt">{rp(total(p))}</span></div>
           ))}
       </div>
-      <button className="btn btn-ghost btn-sm rail-add" onClick={onViewAll}>Lihat Semua Transaksi</button>
+      <button className="btn btn-ghost btn-sm rail-add" onClick={onViewAll}>Lihat semua transaksi</button>
+    </div>
+  )
+}
+
+/**
+ * The board writes on every tap, so the one thing the operator must be able to
+ * trust is that the write landed. Connection and save share a single slot:
+ * whatever is wrong right now is what it says, and a failure offers the retry
+ * instead of asking them to guess which tap to repeat.
+ */
+function SaveStatus({ saving, failed, onRetry, connected }: {
+  saving: boolean; failed: boolean; onRetry: () => void
+  connected: 'on' | 'off' | 'pending' | 'local'
+}) {
+  if (failed) return (
+    <button className="db-badge alert bad" onClick={onRetry}>
+      <span className="db-dot bad" />
+      Gagal disimpan — coba lagi
+    </button>
+  )
+  if (saving) return (
+    <div className="db-badge alert" role="status">
+      <span className="db-dot pending" />
+      Menyimpan…
+    </div>
+  )
+  const label = connected === 'local' ? 'Tersimpan di perangkat ini'
+    : connected === 'off' ? 'Koneksi terputus'
+    : connected === 'pending' ? 'Menghubungkan…'
+    : 'Tersimpan'
+  return (
+    <div className={`db-badge${connected === 'off' ? ' alert bad' : ''}`} role="status"
+      title={connected === 'off' ? 'Perubahan belum tentu tersimpan. Periksa koneksi.' : undefined}>
+      <span className={`db-dot ${connected === 'off' ? 'bad' : connected === 'pending' ? 'pending' : connected === 'local' ? 'off' : 'on'}`} />
+      {label}
     </div>
   )
 }
@@ -803,6 +910,7 @@ function Icon({ name }: { name: string }) {
     flag: <><path d="M4.5 21V4" /><path d="M4.5 4.5h12l-1.6 4 1.6 4h-12" /></>,
     trophy: <><path d="M7 4h10v5a5 5 0 0 1-10 0V4z" /><path d="M7 6H4.5v1.5A3.5 3.5 0 0 0 8 11" /><path d="M17 6h2.5v1.5A3.5 3.5 0 0 1 16 11" /><path d="M12 14v3M8.5 20h7M10 17h4l1 3H9l1-3z" /></>,
     plus: <path d="M12 5v14M5 12h14" />,
+    calendar: <><rect x="3.2" y="5" width="17.6" height="16" rx="2.4" /><path d="M3.2 10h17.6M8 3v4M16 3v4" /></>,
     logout: <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></>,
   }
   return (
@@ -818,12 +926,14 @@ function AssignCourtModal({ allCourts, freeCourts, onAssign, onClose }: {
   allCourts: number[], freeCourts: number[],
   onAssign: (courtId: number) => void, onClose: () => void
 }) {
+  const dialog = useDialog(onClose)
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 320 }}>
+      <div className="modal" {...dialog} aria-labelledby="pick-court"
+        onClick={e => e.stopPropagation()} style={{ maxWidth: 320 }}>
         <div className="modal-header">
-          <h2>Pilih Lapangan</h2>
-          <button className="btn btn-ghost btn-sm" onClick={onClose}>✕</button>
+          <h2 id="pick-court">Pilih lapangan</h2>
+          <button className="btn btn-ghost btn-sm" onClick={onClose} aria-label="Tutup">✕</button>
         </div>
         <div className="modal-body">
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
@@ -874,37 +984,38 @@ function ConfigModal({ state, onSave, onClose, onHardReset }: ConfigModalProps) 
     }))
   }
 
+  const dialog = useDialog(onClose)
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
+      <div className="modal" {...dialog} aria-labelledby="cfg-title" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>Konfigurasi Sesi</h2>
-          <button className="btn btn-ghost btn-sm" onClick={onClose}>✕</button>
+          <h2 id="cfg-title">Konfigurasi sesi</h2>
+          <button className="btn btn-ghost btn-sm" onClick={onClose} aria-label="Tutup">✕</button>
         </div>
         <div className="modal-body">
           <div className="config-form">
             <div>
-              <label className="config-label">Tanggal Sesi</label>
+              <label className="config-label">Tanggal sesi</label>
               <input className="config-input" value={form.sessionDate}
                 onChange={e => setForm(f => ({ ...f, sessionDate: e.target.value }))} />
             </div>
             <div>
-              <label className="config-label">Target Pemain</label>
+              <label className="config-label">Target jumlah pemain</label>
               <input className="config-input" type="number" min={1} value={form.targetPlayers}
                 onChange={e => setForm(f => ({ ...f, targetPlayers: +e.target.value }))} />
             </div>
             <div>
-              <label className="config-label">Harga Bola per Biji (Rp)</label>
+              <label className="config-label">Harga satu bola (Rp)</label>
               <input className="config-input" type="number" min={1} value={form.shuttlePrice}
                 onChange={e => setForm(f => ({ ...f, shuttlePrice: +e.target.value }))} />
             </div>
             <div>
-              <label className="config-label">Biaya Harian (Rp)</label>
+              <label className="config-label">Biaya pemain harian (Rp)</label>
               <input className="config-input" type="number" min={0} value={form.harianFee}
                 onChange={e => setForm(f => ({ ...f, harianFee: +e.target.value }))} />
             </div>
             <div>
-              <label className="config-label">Time Slots & Lapangan</label>
+              <label className="config-label">Jam main dan jumlah lapangan</label>
               {form.timeSlots.map((slot, i) => (
                 <div key={i} className="slot-row">
                   <input className="config-input" value={slot.start} placeholder="17:00"
@@ -919,6 +1030,7 @@ function ConfigModal({ state, onSave, onClose, onHardReset }: ConfigModalProps) 
                   {form.timeSlots.length > 1 && (
                     <button className="btn btn-ghost btn-sm"
                       style={{ padding: '4px 8px', flexShrink: 0 }}
+                      aria-label={`Hapus slot ${slot.start || i + 1}`} title="Hapus slot ini"
                       onClick={() => setForm(f => ({ ...f, timeSlots: f.timeSlots.filter((_, idx) => idx !== i) }))}>
                       ✕
                     </button>
@@ -927,7 +1039,7 @@ function ConfigModal({ state, onSave, onClose, onHardReset }: ConfigModalProps) 
               ))}
               <button className="btn btn-ghost btn-sm" style={{ marginTop: 6 }}
                 onClick={() => setForm(f => ({ ...f, timeSlots: [...f.timeSlots, { start: '', end: '', courts: 2 }] }))}>
-                + Tambah Slot
+                Tambah slot
               </button>
             </div>
 
@@ -940,22 +1052,23 @@ function ConfigModal({ state, onSave, onClose, onHardReset }: ConfigModalProps) 
             </div>
 
             <hr style={{ border: 'none', borderTop: '1px solid var(--border)' }} />
+            <p className="config-warn">Mengosongkan sesi membuang semua pemain, match dan kas hari ini. Pengaturan di atas tetap.</p>
             <button className="btn btn-danger btn-sm" style={{ width: '100%' }}
               onClick={() => {
-                if (!confirm('Reset semua data sesi? Ini akan menghapus semua pemain dan pertandingan hari ini.')) return
+                if (!confirm('Kosongkan sesi ini? Semua pemain, match dan kas hari ini terhapus dan tidak bisa dikembalikan.')) return
                 onSave({ ...DEFAULT_STATE, ...form })
               }}>
-              ⚠ Reset Sesi
+              Kosongkan sesi ini
             </button>
 
             <details style={{ marginTop: 8 }}>
               <summary style={{ fontSize: 11, color: 'var(--dim)', cursor: 'pointer', userSelect: 'none' }}>
-                🛠 Testing Tools
+                Alat uji
               </summary>
               <div style={{ marginTop: 8 }}>
                 <button className="btn btn-danger btn-sm" style={{ width: '100%', opacity: 0.85 }}
                   onClick={onHardReset}>
-                  💣 Hard Reset (hapus semua data + reload)
+                  Hapus semua data hari ini dan muat ulang
                 </button>
               </div>
             </details>
@@ -1028,44 +1141,47 @@ function AddToQueueModal({ state, initialSelected, submitLabel, onSubmit, onClos
   }
 
   const ready = selected.length === 4
+  const dialog = useDialog(onClose)
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
+      <div className="modal" {...dialog} aria-labelledby="queue-title" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>⚡ Antri Match</h2>
-          <button className="btn btn-ghost btn-sm" onClick={onClose}>✕</button>
+          <h2 id="queue-title">Susun match</h2>
+          <button className="btn btn-ghost btn-sm" onClick={onClose} aria-label="Tutup">✕</button>
         </div>
         <div className="modal-body">
           <div className="config-form">
             <div>
               <label className="config-label">
-                Pilih 4 Pemain ({selected.length}/4) — urutan: Tim 1 (1,2) vs Tim 2 (3,4)
+                Pilih 4 pemain ({selected.length}/4). Dua pertama jadi tim 1, dua berikutnya tim 2.
               </label>
               {(() => {
                 const chip = (p: Player) => {
                   const idx = selected.indexOf(p.id)
                   const isTeam1 = idx === 0 || idx === 1
                   return (
-                    <div key={p.id} className="waiting-chip" onClick={() => toggle(p.id)}
+                    <div key={p.id} className="waiting-chip pick"
+                      aria-pressed={idx >= 0}
+                      aria-label={`${p.name}, ${p.skill}${idx >= 0 ? `, pemain ${idx + 1} di tim ${isTeam1 ? 1 : 2}` : ''}`}
+                      {...clickable(() => toggle(p.id))}
                       style={{
-                        cursor: 'pointer',
-                        outline: idx >= 0 ? `2px solid ${isTeam1 ? 'var(--gold)' : '#4fc3f7'}` : 'none',
+                        outline: idx >= 0 ? `2px solid ${isTeam1 ? 'var(--gold)' : 'var(--teal)'}` : 'none',
                         opacity: selected.length === 4 && idx < 0 ? 0.4 : 1,
                       }}>
-                      {idx >= 0 && <span style={{ fontSize: 10, fontWeight: 800, color: isTeam1 ? 'var(--gold)' : '#4fc3f7', minWidth: 14 }}>{idx + 1}</span>}
+                      {idx >= 0 && <span style={{ fontSize: 10, fontWeight: 800, color: isTeam1 ? 'var(--gold)' : 'var(--teal)', minWidth: 14 }}>{idx + 1}</span>}
                       <div className={`status-dot ${p.status === 'Playing' ? 'playing' : 'waiting'}`} />
                       <span className={`skill-badge skill-${p.skill}`}>{p.skill}</span>
                       {p.name}
                     </div>
                   )
                 }
-                const sub = (label: string) => <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted)', letterSpacing: 1, marginBottom: 4 }}>{label}</div>
+                const sub = (label: string) => <div className="pick-group">{label}</div>
                 return (
                   <>
                     {notYetPlayed.length > 0 && (
                       <div style={{ marginTop: 8 }}>
-                        {sub('BELUM MAIN')}
+                        {sub('Belum main')}
                         <div className="waiting-grid">{notYetPlayed.map(chip)}</div>
                       </div>
                     )}
@@ -1084,7 +1200,7 @@ function AddToQueueModal({ state, initialSelected, submitLabel, onSubmit, onClos
                     )}
                     {playing.length > 0 && (
                       <div style={{ marginTop: 8 }}>
-                        {sub('SEDANG MAIN')}
+                        {sub('Sedang main — akan mulai setelah mereka selesai')}
                         <div className="waiting-grid">{playing.map(chip)}</div>
                       </div>
                     )}
@@ -1102,7 +1218,7 @@ function AddToQueueModal({ state, initialSelected, submitLabel, onSubmit, onClos
                 Tim 1: {selected.slice(0,2).map(id => state.players.find(p => p.id === id)?.name ?? '?').join(' · ')}
               </span>
               {selected.length > 2 && (
-                <span style={{ color: '#4fc3f7' }}>
+                <span style={{ color: 'var(--teal)' }}>
                   Tim 2: {selected.slice(2,4).map(id => state.players.find(p => p.id === id)?.name ?? '?').join(' · ')}
                 </span>
               )}
@@ -1110,25 +1226,23 @@ function AddToQueueModal({ state, initialSelected, submitLabel, onSubmit, onClos
           )}
 
           {skippedFirst ? (
-            <div style={{ background: 'rgba(255,200,0,0.08)', border: '1px solid var(--gold)', borderRadius: 8, padding: 12 }}>
-              <div style={{ fontSize: 13, color: 'var(--gold)', fontWeight: 700, marginBottom: 6 }}>⚠ Peringatan</div>
-              <div style={{ fontSize: 12, color: 'var(--text)', marginBottom: 10 }}>
-                pemain <strong>{skippedFirst}</strong> sudah lama berhenti, pertimbangkan untuk set ulang
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button className="btn btn-primary" style={{ flex: 1 }} onClick={proceedWithConflictCheck}>Lanjutkan</button>
-                <button className="btn btn-ghost" onClick={() => setSkippedFirst(null)}>Ganti Pemain</button>
+            <div className="warn" role="alert">
+              <p className="warn-body">
+                <strong>{skippedFirst}</strong> sudah paling lama menunggu dan tidak ada di pilihan ini.
+              </p>
+              <div className="warn-acts">
+                <button className="btn btn-primary" style={{ flex: 1 }} onClick={proceedWithConflictCheck}>Antrikan saja</button>
+                <button className="btn btn-ghost" onClick={() => setSkippedFirst(null)}>Ganti pemain</button>
               </div>
             </div>
           ) : warning ? (
-            <div style={{ background: 'rgba(255,200,0,0.08)', border: '1px solid var(--gold)', borderRadius: 8, padding: 12 }}>
-              <div style={{ fontSize: 13, color: 'var(--gold)', fontWeight: 700, marginBottom: 6 }}>⚠ Peringatan</div>
-              <div style={{ fontSize: 12, color: 'var(--text)', marginBottom: 10, textTransform: 'capitalize' }}>{warning}. Tetap lanjutkan?</div>
-              <div style={{ display: 'flex', gap: 8 }}>
+            <div className="warn" role="alert">
+              <p className="warn-body">Susunan ini mengulang match sebelumnya: {warning}.</p>
+              <div className="warn-acts">
                 <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => onSubmit(selected as [string, string, string, string])}>
-                  Lanjutkan
+                  Antrikan saja
                 </button>
-                <button className="btn btn-ghost" onClick={() => setWarning(null)}>Ganti Pemain</button>
+                <button className="btn btn-ghost" onClick={() => setWarning(null)}>Ganti pemain</button>
               </div>
             </div>
           ) : (
@@ -1137,9 +1251,10 @@ function AddToQueueModal({ state, initialSelected, submitLabel, onSubmit, onClos
                 className="btn btn-primary"
                 style={{ flex: 1 }}
                 disabled={!ready}
+                title={ready ? undefined : `Pilih ${4 - selected.length} pemain lagi.`}
                 onClick={checkAndSubmit}
               >
-                {submitLabel ?? 'Tambah ke Antrian'}
+                {submitLabel ?? 'Antrikan match'}
               </button>
               <button className="btn btn-ghost" onClick={onClose}>Batal</button>
             </div>
@@ -1163,17 +1278,20 @@ function EditMatchModal({ editingMatch, setEditingMatch, onSave, onDelete }: {
   const score = editingMatch.scoreL !== '' || editingMatch.scoreR !== ''
     ? `${editingMatch.scoreL}-${editingMatch.scoreR}` : ''
   const set = (patch: Partial<EditingMatch>) => setEditingMatch({ ...editingMatch, ...patch })
+  const dialog = useDialog(() => setEditingMatch(null))
   return (
     <div className="modal-overlay" onClick={() => setEditingMatch(null)}>
-      <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 280 }}>
+      <div className="modal" {...dialog} aria-labelledby="edit-match"
+        onClick={e => e.stopPropagation()} style={{ maxWidth: 280 }}>
         <div className="modal-header">
-          <h2>Edit Match</h2>
-          <button className="btn btn-ghost btn-sm" onClick={() => setEditingMatch(null)}>✕</button>
+          <h2 id="edit-match">Ubah bola dan skor</h2>
+          <button className="btn btn-ghost btn-sm" onClick={() => setEditingMatch(null)} aria-label="Tutup">✕</button>
         </div>
         <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div>
             <label className="config-label">Bola</label>
             <input
+              autoFocus
               type="number" inputMode="numeric" min={0}
               className="config-input"
               value={editingMatch.bola}
@@ -1212,9 +1330,9 @@ function EditMatchModal({ editingMatch, setEditingMatch, onSave, onDelete }: {
             </button>
           </div>
           <div style={{ borderTop: '1px solid var(--border-s)', paddingTop: 12, marginTop: 4 }}>
-            <button className="btn btn-ghost" style={{ width: '100%', color: 'var(--red, #ef4444)' }}
+            <button className="btn btn-danger" style={{ width: '100%' }}
               onClick={() => onDelete(editingMatch.id)}>
-              Hapus Match
+              Hapus match ini
             </button>
           </div>
         </div>

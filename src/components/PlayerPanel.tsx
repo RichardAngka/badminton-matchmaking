@@ -1,7 +1,9 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { clickable, useDialog } from '../ui'
 import type { AppState, Match, Player, SkillLevel, Gender, PlayerStatus, PlayerType } from '../types'
 import { Button } from './ui/button'
 import { useIsAdmin } from '../RoleContext'
+import { findMember, memberDay, type Member } from '../members'
 
 interface Props {
   open: boolean
@@ -16,7 +18,7 @@ const STATUS_ORDER: Record<PlayerStatus, number> = { Waiting: 0, Playing: 1, Lef
 const SKILL_ORDER: Record<SkillLevel, number> = { A1: 0, A2: 1, B1: 2, B2: 3 }
 
 const fieldStyle: React.CSSProperties = {
-  width: '100%', background: '#0d1018',
+  width: '100%', background: 'var(--card-lo)',
   border: '1px solid rgba(255,255,255,0.09)', borderRadius: 10,
   padding: '12px 14px', color: 'var(--text)', fontSize: 14,
   boxSizing: 'border-box', outline: 'none',
@@ -36,7 +38,11 @@ export function PlayerPanel({ open, onClose, state, onUpdate, inline, canWrite =
   const [editDraft, setEditDraft] = useState({ name: '', skill: 'B1' as SkillLevel, gender: 'M' as Gender, type: 'member' as PlayerType })
   const [profileId, setProfileId] = useState<string | null>(null)
   const [filterGrade, setFilterGrade] = useState<SkillLevel | null>(null)
-  const [showForm, setShowForm] = useState(false)
+  const nameRef = useRef<HTMLInputElement>(null)
+  const { label: memberLabel, list: members } = memberDay(state.sessionDate)
+  // What the last tap did, so every tap answers: a new check-in, a member
+  // back from going home, or one who was already on the list.
+  const [lastAdded, setLastAdded] = useState<{ name: string; at: number; kind: 'in' | 'back' | 'already' } | null>(null)
 
   function startEdit(p: Player) {
     setEditId(p.id)
@@ -59,8 +65,26 @@ export function PlayerPanel({ open, onClose, state, onUpdate, inline, canWrite =
     setEditId(null)
   }
 
-  function addPlayer() {
-    if (!canWrite || !name.trim()) return
+  // `m` is a member tapped in the standing list: it checks in straight away
+  // instead of filling the form. Without it the form's own fields are used.
+  function addPlayer(m?: Member) {
+    const who = m ? { name: m.name, skill: m.skill, gender: m.gender ?? 'M' as Gender } : { name: name.trim(), skill, gender }
+    if (!canWrite || !who.name) return
+    // A tap on a chip ends that search: the next person to walk in should see
+    // the whole list, not the filter for the last one.
+    if (m) setName('')
+    // A member already on today's list is not added twice; one who went home
+    // is checked back in, which is what tapping their struck-through chip means.
+    const existing = state.players.find(p => p.name.toLowerCase() === who.name.toLowerCase())
+    if (m && existing) {
+      if (existing.status === 'Left') {
+        markLeft(existing)
+        setLastAdded({ name: existing.name, at: Date.now(), kind: 'back' })
+      } else {
+        setLastAdded({ name: existing.name, at: existing.checkInTime ?? Date.now(), kind: 'already' })
+      }
+      return
+    }
     const now = Date.now()
     const restTimes = state.players
       .filter(p => p.status === 'Waiting' && p.restingSince != null)
@@ -73,8 +97,8 @@ export function PlayerPanel({ open, onClose, state, onUpdate, inline, canWrite =
     const type: PlayerType = isAdmin ? playerType : 'member'
     const player: Player = {
       id: crypto.randomUUID(),
-      name: name.trim(),
-      skill, gender,
+      name: who.name,
+      skill: who.skill, gender: who.gender,
       type,
       status: 'Waiting',
       checkInTime: now,
@@ -85,6 +109,10 @@ export function PlayerPanel({ open, onClose, state, onUpdate, inline, canWrite =
     }
     onUpdate({ ...state, players: [...state.players, player] })
     setName('')
+    setLastAdded({ name: player.name, at: now, kind: 'in' })
+    // Only the typed flow gets the caret back — refocusing after a chip tap
+    // would throw the phone keyboard over the list you are tapping.
+    if (!m) nameRef.current?.focus()
   }
 
   function deletePlayer(id: string) {
@@ -118,11 +146,11 @@ export function PlayerPanel({ open, onClose, state, onUpdate, inline, canWrite =
   const displayed = filterGrade ? sorted.filter(p => p.skill === filterGrade) : sorted
   const activeCount = state.players.filter(p => p.status !== 'Left').length
 
-  const dotStyle = (p: Player) => ({
-    background: p.status === 'Waiting' ? 'var(--accent)' : p.status === 'Playing' ? 'var(--primary)' : 'var(--dim)',
-    animation: p.status === 'Waiting' ? 'pulse 2s infinite' : 'none',
-    width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
-  } as React.CSSProperties)
+  const fee = state.harianFee ?? 25000
+  const rp = (n: number) => `Rp ${n.toLocaleString('id-ID')}`
+
+  const dotClass = (p: Player) =>
+    `status-dot ${p.status === 'Waiting' ? 'waiting' : p.status === 'Playing' ? 'playing' : 'left'}`
 
   const profileModal = profileId && (() => {
     const p = state.players.find(pl => pl.id === profileId)!
@@ -130,23 +158,11 @@ export function PlayerPanel({ open, onClose, state, onUpdate, inline, canWrite =
   })()
 
   const filterChips = (
-    <div style={{ display: 'flex', gap: 6, padding: '12px 12px 4px', flexWrap: 'nowrap', overflowX: 'auto' }}>
+    <div className="rf" role="group" aria-label="Saring menurut grade">
       {([null, 'A1', 'A2', 'B1', 'B2'] as (SkillLevel | null)[]).map(g => (
-        <button
-          key={g ?? 'all'}
-          onClick={() => setFilterGrade(g)}
-          style={{
-            flexShrink: 0,
-            padding: '6px 14px', borderRadius: 100,
-            border: '1px solid',
-            borderColor: filterGrade === g ? 'var(--gold)' : 'rgba(255,255,255,0.12)',
-            background: filterGrade === g ? 'var(--gold)' : 'transparent',
-            color: filterGrade === g ? '#000' : 'var(--text)',
-            fontWeight: filterGrade === g ? 800 : 500, fontSize: 13,
-            cursor: 'pointer', whiteSpace: 'nowrap',
-          }}
-        >
-          {g ?? 'Semua'} ({state.players.filter(p => p.status !== 'Left' && (g === null || p.skill === g)).length})
+        <button key={g ?? 'all'} aria-pressed={filterGrade === g} onClick={() => setFilterGrade(g)}>
+          {g ?? 'Semua'}
+          <span className="rf-n">{state.players.filter(p => p.status !== 'Left' && (g === null || p.skill === g)).length}</span>
         </button>
       ))}
     </div>
@@ -155,47 +171,74 @@ export function PlayerPanel({ open, onClose, state, onUpdate, inline, canWrite =
   const playerList = (
     <div className="player-list">
       {displayed.map(p => (
-        <div key={p.id} className={`player-item${p.status === 'Left' ? ' is-left' : ''}`}>
-          <div className={`player-avatar avatar-${p.skill}`}>
-            {p.name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()}
-          </div>
+        <div key={p.id} className={`player-item${p.status === 'Left' ? ' is-left' : ''}${editId === p.id ? ' is-editing' : ''}`}>
           {editId === p.id ? (
-            <div className="player-info" style={{ flex: 1, gap: 4, display: 'flex', flexDirection: 'column' }}>
-              <input
-                autoFocus
-                value={editDraft.name}
-                onChange={e => setEditDraft(d => ({ ...d, name: e.target.value }))}
-                onKeyDown={e => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') setEditId(null) }}
-                style={{ fontSize: 13, padding: '2px 6px', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', width: '100%' }}
-              />
-              <div style={{ display: 'flex', gap: 4 }}>
-                <select value={editDraft.skill} onChange={e => setEditDraft(d => ({ ...d, skill: e.target.value as SkillLevel }))} style={{ fontSize: 12, padding: '2px 4px', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)' }}>
-                  <option value="A1">A1</option><option value="A2">A2</option><option value="B1">B1</option><option value="B2">B2</option>
-                </select>
-                <select value={editDraft.gender} onChange={e => setEditDraft(d => ({ ...d, gender: e.target.value as Gender }))} style={{ fontSize: 12, padding: '2px 4px', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)' }}>
-                  <option value="M">M</option><option value="F">F</option>
-                </select>
-                <select value={editDraft.type} onChange={e => setEditDraft(d => ({ ...d, type: e.target.value as PlayerType }))} style={{ fontSize: 12, padding: '2px 4px', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)' }}>
-                  <option value="member">Member</option><option value="harian">Harian</option>
-                </select>
-                <Button size="sm" onClick={saveEdit}>✓</Button>
-                <Button variant="ghost" size="sm" onClick={() => setEditId(null)}>✕</Button>
+            /* Editing speaks the same form language as check-in: one name
+               field, the same three rows of buttons. Learn it once. */
+            <div className="ci ci-edit">
+              <div className="ci-top">
+                <input
+                  autoFocus
+                  className="ci-name"
+                  value={editDraft.name}
+                  aria-label="Nama pemain"
+                  onChange={e => setEditDraft(d => ({ ...d, name: e.target.value }))}
+                  onKeyDown={e => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') setEditId(null) }}
+                />
+                <button className="btn btn-primary ci-go" onClick={saveEdit} disabled={!editDraft.name.trim()}>Simpan</button>
+                <button className="btn btn-ghost ci-go" onClick={() => setEditId(null)}>Batal</button>
               </div>
+              <div className="ci-rows">
+                <div className="ci-field">
+                  <div className="ci-seg" role="group" aria-label="Grade">
+                    {(['A1', 'A2', 'B1', 'B2'] as SkillLevel[]).map(g => (
+                      <button key={g} aria-pressed={editDraft.skill === g}
+                        onClick={() => setEditDraft(d => ({ ...d, skill: g }))}>{g}</button>
+                    ))}
+                  </div>
+                </div>
+                <div className="ci-field">
+                  <div className="ci-seg" role="group" aria-label="Jenis kelamin">
+                    <button aria-pressed={editDraft.gender === 'M'} onClick={() => setEditDraft(d => ({ ...d, gender: 'M' }))}>Pria</button>
+                    <button aria-pressed={editDraft.gender === 'F'} onClick={() => setEditDraft(d => ({ ...d, gender: 'F' }))}>Wanita</button>
+                  </div>
+                </div>
+                <div className="ci-field">
+                  <div className="ci-seg" role="group" aria-label="Tipe pemain">
+                    <button aria-pressed={editDraft.type === 'member'} onClick={() => setEditDraft(d => ({ ...d, type: 'member' }))}>Member</button>
+                    <button aria-pressed={editDraft.type === 'harian'} onClick={() => setEditDraft(d => ({ ...d, type: 'harian' }))}>Harian +{rp(fee)}</button>
+                  </div>
+                </div>
+              </div>
+              {/* Switching type moves money, so the row says what it will do. */}
+              {editDraft.type !== (p.type ?? 'member') && (
+                <div className="ci-note warn">
+                  {editDraft.type === 'harian'
+                    ? `Tagihan ${p.name} bertambah ${rp(fee)}.`
+                    : `Tagihan ${p.name} berkurang ${rp(fee)}.`}
+                </div>
+              )}
             </div>
           ) : (
-            <div className="player-info" style={{ cursor: 'pointer' }} onClick={() => setProfileId(p.id)}>
+            <>
+            <div className={`player-avatar avatar-${p.skill}`}>
+              {p.name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()}
+            </div>
+            <div className="player-info" title={`Lihat profil ${p.name}`}
+              aria-label={`Lihat profil ${p.name}`}
+              {...clickable(() => setProfileId(p.id))}>
               <div className="player-item-name" style={{ fontWeight: 700 }}>
-                <div style={dotStyle(p)} />
+                <div className={dotClass(p)} />
                 {p.name}
                 <span className={`gender-tag gender-${p.gender}`}>{p.gender === 'F' ? 'W' : 'M'}</span>
               </div>
               <div className="player-item-meta">
                 <span className={`skill-badge skill-${p.skill}`}>{p.skill}</span>
-                <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: (p.type ?? 'member') === 'harian' ? '#f59e0b22' : '#4fc3f722', color: (p.type ?? 'member') === 'harian' ? '#f59e0b' : '#4fc3f7' }}>
+                <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: (p.type ?? 'member') === 'harian' ? 'var(--gold-bg)' : 'rgba(250,250,248,.07)', color: (p.type ?? 'member') === 'harian' ? 'var(--gold)' : 'var(--muted)' }}>
                   {(p.type ?? 'member') === 'harian' ? 'Harian' : 'Member'}
                 </span>
                 <span>{p.gamesPlayed}x</span>
-                {p.totalCost > 0 && <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10 }}>Rp {p.totalCost.toLocaleString('id-ID')}</span>}
+                {p.totalCost > 0 && <span style={{ fontSize: 11.5 }}>Rp {p.totalCost.toLocaleString('id-ID')}</span>}
               </div>
               {(p.checkInTime != null || p.checkOutTime != null) && (
                 <div className="player-item-times">
@@ -212,179 +255,198 @@ export function PlayerPanel({ open, onClose, state, onUpdate, inline, canWrite =
                 </div>
               )}
             </div>
-          )}
-          <div className="player-actions">
-            {isAdmin && editId !== p.id && (
+            <div className="player-actions">
+            {isAdmin && (
               <Button
                 variant="tertiary"
-                size="icon-lg"
+                size="icon"
+                className="h-9 w-9"
                 onClick={() => startEdit(p)}
-                title="Edit pemain"
-              >✏</Button>
-            )}
-            {p.status !== 'Playing' && editId !== p.id && (
-              <Button
-                variant="default"
-                size={isAdmin ? 'icon-lg' : 'sm'}
-                className={!isAdmin ? 'checkinout-btn' : undefined}
-                onClick={() => markLeft(p)}
-                title={p.status === 'Left' ? 'Check-in kembali' : 'Tandai pulang'}
+                title={`Edit ${p.name}`}
               >
-                {p.status === 'Left' ? (isAdmin ? '↩' : 'Check-in') : (isAdmin ? '→' : 'Check-out')}
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4 20h4L19.5 8.5a2.1 2.1 0 0 0-3-3L5 17v3z" /><path d="M14.5 6.5l3 3" />
+                </svg>
               </Button>
             )}
-            {isAdmin && p.status !== 'Playing' && editId !== p.id && (
+            {p.status !== 'Playing' && (
               <Button
-                variant="destructive"
-                size="icon-lg"
+                variant={p.status === 'Left' ? 'default' : 'outline'}
+                size="sm"
+                className="checkinout-btn"
+                onClick={() => markLeft(p)}
+                title={p.status === 'Left' ? `Check-in ${p.name} kembali` : `${p.name} pulang`}
+              >
+                {p.status === 'Left' ? 'Check-in' : 'Check-out'}
+              </Button>
+            )}
+            {isAdmin && p.status !== 'Playing' && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 text-[var(--dim)] hover:text-[var(--red)] hover:bg-[rgba(244,96,108,.12)]"
                 onClick={() => deletePlayer(p.id)}
-                title="Hapus pemain"
+                title={`Hapus ${p.name}`}
+                aria-label={`Hapus ${p.name}`}
               >✕</Button>
             )}
-          </div>
+            </div>
+            </>
+          )}
         </div>
       ))}
       {displayed.length === 0 && state.players.length > 0 && (
         <div style={{ padding: '28px 16px', textAlign: 'center', color: 'var(--dim)', fontSize: 13 }}>
-          Tidak ada pemain grade {filterGrade}.
+          Belum ada pemain grade {filterGrade} hari ini.
         </div>
       )}
       {state.players.length === 0 && (
         <div style={{ padding: '40px 16px', textAlign: 'center', color: 'var(--dim)', fontSize: 13 }}>
-          Belum ada pemain.<br />Tap tombol di bawah untuk check-in.
+          Belum ada pemain hari ini.<br />Tap nama member di atas untuk check-in.
         </div>
       )}
     </div>
   )
 
-  // form used by drawer (horizontal layout kept as-is)
-  const addForm = (
-    <div className="add-player-form">
-      <h3>+ Tambah / Check-In Pemain</h3>
-      <div className="form-row">
-        <div className="form-field" style={{ flex: 2 }}>
-          <label>Nama Pemain</label>
-          <input value={name} onChange={e => setName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addPlayer()} placeholder="contoh: Felix W" autoComplete="off" />
-        </div>
-      </div>
-      <div className="form-row">
-        <div className="form-field">
-          <label>Level</label>
-          <select value={skill} onChange={e => setSkill(e.target.value as SkillLevel)}>
-            <option value="A1">A1 — Elite</option><option value="A2">A2 — Kuat</option>
-            <option value="B1">B1 — Menengah</option><option value="B2">B2 — Berkembang</option>
-          </select>
-        </div>
-        <div className="form-field">
-          <label>Gender</label>
-          <select value={gender} onChange={e => setGender(e.target.value as Gender)}>
-            <option value="M">M — Pria</option><option value="F">F — Wanita</option>
-          </select>
-        </div>
-        {isAdmin && (
-          <div className="form-field">
-            <label>Tipe</label>
-            <select value={playerType} onChange={e => setPlayerType(e.target.value as PlayerType)}>
-              <option value="member">Member</option><option value="harian">Harian (+Rp 25.000)</option>
-            </select>
-          </div>
+  /* The member list is the form's subject, not an extra below it: on a club
+     night the job is "tap whoever just walked in", and only a guest needs the
+     grade and gender controls — so those appear when the typed name is not a
+     member, and stay out of the way when it is. */
+  const query = name.trim().toLowerCase()
+  const exact = findMember(members, name)
+  const presentOf = (m: Member) =>
+    state.players.find(p => p.name.toLowerCase() === m.name.toLowerCase() && p.status !== 'Left')
+  const shown = members
+    .filter(m => !query || m.name.toLowerCase().includes(query))
+    // Whoever is still missing stays at the top, so the next tap is never a
+    // scroll away late in the session. Inside that, highest grade first —
+    // A1 down to B2 — with the chat's order breaking any tie.
+    .map((m, i) => ({ m, i, here: presentOf(m) }))
+    .sort((a, b) =>
+      (a.here ? 1 : 0) - (b.here ? 1 : 0)
+      || SKILL_ORDER[a.m.skill] - SKILL_ORDER[b.m.skill]
+      || a.i - b.i)
+  const hadir = members.filter(m => presentOf(m)).length
+  const isGuest = Boolean(query) && !exact   // a name nobody on the list has
+
+  const composer = (
+    <div className="ci">
+      <div className="ci-top">
+        <input
+          ref={nameRef}
+          className="ci-name"
+          value={name}
+          onChange={e => setName(e.target.value)}
+          // Enter means the obvious one: the member whose name is typed out, or
+          // the only one still matching. A half-typed query is nobody, so it
+          // waits rather than checking in a player called "fel".
+          onKeyDown={e => {
+            if (e.key !== 'Enter') return
+            const only = shown.length === 1 ? shown[0].m : undefined
+            if (exact || only) addPlayer(exact ?? only)
+            else if (isGuest) addPlayer()
+          }}
+          placeholder="Cari member atau tulis nama baru"
+          aria-label="Cari member atau tulis nama pemain baru"
+          autoComplete="off"
+        />
+        {isGuest && (
+          <button className="btn btn-primary ci-go" onClick={() => addPlayer()}>
+            Check-in {name.trim()}
+          </button>
         )}
       </div>
-      <Button className="w-full" onClick={addPlayer}>Check-In Pemain</Button>
+
+      <div className="ci-mem">
+        <div className="ci-mem-h">
+          <span>Member tetap {memberLabel}</span>
+          <span className="ci-mem-n">{hadir} hadir, {members.length - hadir} belum</span>
+        </div>
+        <div className="ci-mem-list">
+          {shown.map(({ m, here }) => (
+            <button
+              key={m.name}
+              className="ci-mem-chip"
+              data-here={here ? '' : undefined}
+              title={here
+                ? `${m.name} sudah check-in`
+                : `Check-in ${m.name}, grade ${m.skill}`}
+              onClick={() => addPlayer(m)}
+            >
+              {here
+                ? <svg className="ci-mem-ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+                : <span className="ci-mem-g" data-g={m.skill}>{m.skill}</span>}
+              {m.name}
+            </button>
+          ))}
+          {shown.length === 0 && (
+            <p className="ci-mem-none">
+              Tidak ada member bernama “{name.trim()}”. Tekan Check-in untuk
+              menambahkannya sebagai pemain baru.
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Only a guest needs these: a member's grade and gender are known. */}
+      {isGuest && (
+        <div className="ci-rows">
+          <div className="ci-field">
+            <div className="ci-seg grade" role="group" aria-label="Grade">
+              {(['A1', 'A2', 'B1', 'B2'] as SkillLevel[]).map(g => (
+                <button key={g} data-g={g} aria-pressed={skill === g} onClick={() => setSkill(g)}>{g}</button>
+              ))}
+            </div>
+          </div>
+
+          <div className="ci-field">
+            <div className="ci-seg" role="group" aria-label="Jenis kelamin">
+              <button aria-pressed={gender === 'M'} onClick={() => setGender('M')}>Pria</button>
+              <button aria-pressed={gender === 'F'} onClick={() => setGender('F')}>Wanita</button>
+            </div>
+          </div>
+
+          {isAdmin && (
+            <div className="ci-field">
+              <div className="ci-seg" role="group" aria-label="Tipe pemain">
+                <button aria-pressed={playerType === 'member'} onClick={() => setPlayerType('member')}>Member</button>
+                <button aria-pressed={playerType === 'harian'} onClick={() => setPlayerType('harian')}>
+                  Harian +{rp(fee)}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="ci-note" data-kind={lastAdded?.kind} aria-live="polite">
+        {lastAdded && (() => {
+          const jam = new Date(lastAdded.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+          return <>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
+              {lastAdded.kind === 'already'
+                ? <><circle cx="12" cy="12" r="9" /><path d="M12 8v4" /><path d="M12 16h.01" /></>
+                : <path d="M20 6 9 17l-5-5" />}
+            </svg>
+            <b>{lastAdded.name}</b>
+            {lastAdded.kind === 'in' ? ` check-in ${jam}`
+              : lastAdded.kind === 'back' ? ` check-in lagi ${jam}`
+              : ` sudah check-in sejak ${jam}`}
+          </>
+        })()}
+      </div>
     </div>
   )
-
-  if (inline && showForm) {
-    return (
-      <>
-        {profileModal}
-        <div style={{ padding: '16px 16px 32px', maxWidth: 480 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 28 }}>
-            <button
-              onClick={() => setShowForm(false)}
-              style={{ background: 'rgba(255,255,255,0.06)', border: 'none', borderRadius: 8, width: 36, height: 36, cursor: 'pointer', color: 'var(--text)', fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            >←</button>
-            <div style={{ fontWeight: 800, fontSize: 16, letterSpacing: '.03em' }}>Tambah / Check-In Pemain</div>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div>
-              <label style={labelStyle}>Nama Pemain</label>
-              <input
-                autoFocus
-                value={name}
-                onChange={e => setName(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter' && name.trim()) { addPlayer(); setShowForm(false) } }}
-                placeholder="contoh: Felix W"
-                autoComplete="off"
-                style={fieldStyle}
-              />
-            </div>
-            <div>
-              <label style={labelStyle}>Level</label>
-              <select value={skill} onChange={e => setSkill(e.target.value as SkillLevel)} style={fieldStyle}>
-                <option value="A1">A1 — Elite</option>
-                <option value="A2">A2 — Kuat</option>
-                <option value="B1">B1 — Menengah</option>
-                <option value="B2">B2 — Berkembang</option>
-              </select>
-            </div>
-            <div>
-              <label style={labelStyle}>Gender</label>
-              <select value={gender} onChange={e => setGender(e.target.value as Gender)} style={fieldStyle}>
-                <option value="M">M — Pria</option>
-                <option value="F">F — Wanita</option>
-              </select>
-            </div>
-            {isAdmin && (
-              <div>
-                <label style={labelStyle}>Tipe</label>
-                <select value={playerType} onChange={e => setPlayerType(e.target.value as PlayerType)} style={fieldStyle}>
-                  <option value="member">Member</option>
-                  <option value="harian">Harian (+Rp 25.000)</option>
-                </select>
-              </div>
-            )}
-          </div>
-
-          <Button
-            onClick={() => { if (name.trim()) { addPlayer(); setShowForm(false) } }}
-            className="w-full mt-6"
-          >
-            Check-In Pemain
-          </Button>
-        </div>
-      </>
-    )
-  }
 
   if (inline) {
     return (
       <>
         {profileModal}
-
-        <div style={{ padding: '16px 16px 4px', fontFamily: "'Inter', sans-serif", fontSize: 22, fontWeight: 900, letterSpacing: '.04em', textTransform: 'uppercase' }}>
-          Pemain <span style={{ color: 'var(--muted)', fontWeight: 500, fontSize: 14 }}>({activeCount} aktif)</span>
+        {canWrite && isAdmin && composer}
+        <div className="roster">
+          {filterChips}
+          {playerList}
         </div>
-
-        {filterChips}
-
-        <div style={{ paddingBottom: 96 }}>{playerList}</div>
-
-        {/* Floating + button, right-anchored */}
-        {canWrite && isAdmin && <button
-          onClick={() => setShowForm(true)}
-          style={{
-            position: 'fixed', bottom: 80, right: 20,
-            width: 52, height: 52, borderRadius: '50%',
-            background: 'var(--gold)', color: '#000',
-            border: 'none', fontSize: 26, lineHeight: 1,
-            cursor: 'pointer', zIndex: 100,
-            boxShadow: '0 4px 20px rgba(173,199,255,0.35)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}
-          title="Tambah Pemain"
-        >+</button>}
       </>
     )
   }
@@ -396,20 +458,20 @@ export function PlayerPanel({ open, onClose, state, onUpdate, inline, canWrite =
       <div className={`player-panel${open ? ' open' : ''}`}>
         <div className="player-panel-header">
           <div>
-            <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 1 }}>Pool Pemain</h2>
-            <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 500 }}>{activeCount} pemain aktif</div>
+            <h2>Pemain</h2>
+            <div style={{ fontSize: 12.5, color: 'var(--dim)' }}>{activeCount} pemain aktif</div>
           </div>
           <Button variant="ghost" size="sm" onClick={onClose}>✕</Button>
         </div>
         {filterChips}
         {playerList}
-        {canWrite && isAdmin && addForm}
+        {canWrite && isAdmin && composer}
       </div>
     </>
   )
 }
 
-export const TYPE_COLOR = { XD: '#ce93d8', MD: '#4fc3f7', WD: '#f48fb1' } as const
+export const TYPE_COLOR = { XD: '#D4AF37', MD: '#93A7CC', WD: '#D9A1AE' } as const
 type MatchType = 'XD' | 'MD' | 'WD'
 export function teamType(ids: readonly string[], all: Player[]): MatchType {
   const gs = ids.map(id => all.find(p => p.id === id)?.gender)
@@ -425,16 +487,18 @@ function PlayerProfileModal({ player, matches, allPlayers, onClose }: {
     .filter(m => m.team1.includes(player.id) || m.team2.includes(player.id))
     .sort((a, b) => b.matchNumber - a.matchNumber)
 
+  const dialog = useDialog(onClose)
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 380 }}>
+      <div className="modal" {...dialog} aria-labelledby="profile-title"
+        onClick={e => e.stopPropagation()} style={{ maxWidth: 380 }}>
         <div className="modal-header">
-          <h2>Profil Pemain</h2>
-          <Button variant="ghost" size="sm" onClick={onClose}>✕</Button>
+          <h2 id="profile-title">{player.name}</h2>
+          <Button variant="ghost" size="sm" onClick={onClose} aria-label="Tutup">✕</Button>
         </div>
         <div className="modal-body">
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, paddingBottom: 16 }}>
-            <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'var(--gold)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 800, color: '#000', flexShrink: 0 }}>
+            <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'var(--gold)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 700, color: '#10100A', flexShrink: 0 }}>
               {initials}
             </div>
             <div>
@@ -442,7 +506,7 @@ function PlayerProfileModal({ player, matches, allPlayers, onClose }: {
               <div style={{ display: 'flex', gap: 6, marginTop: 4, alignItems: 'center' }}>
                 <span className={`skill-badge skill-${player.skill}`}>{player.skill}</span>
                 <span className={`gender-tag gender-${player.gender}`}>{player.gender === 'F' ? 'W' : 'M'}</span>
-                <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: (player.type ?? 'member') === 'harian' ? '#f59e0b22' : '#4fc3f722', color: (player.type ?? 'member') === 'harian' ? '#f59e0b' : '#4fc3f7' }}>
+                <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: (player.type ?? 'member') === 'harian' ? 'var(--gold-bg)' : 'rgba(250,250,248,.07)', color: (player.type ?? 'member') === 'harian' ? 'var(--gold)' : 'var(--muted)' }}>
                   {(player.type ?? 'member') === 'harian' ? 'Harian' : 'Member'}
                 </span>
               </div>
@@ -476,14 +540,14 @@ function PlayerProfileModal({ player, matches, allPlayers, onClose }: {
                           <span style={{ color: 'var(--dim)' }}>vs</span>
                           <span style={{ color: TYPE_COLOR[t2t], fontWeight: 700 }}>{t2t}</span>
                         </span>
-                        <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 3, padding: '1px 5px', background: !m.endTime ? 'var(--primary)' : 'var(--border)', color: !m.endTime ? '#000' : 'var(--muted)' }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 3, padding: '1px 5px', background: !m.endTime ? 'var(--primary)' : 'var(--border)', color: !m.endTime ? '#10100A' : 'var(--muted)' }}>
                           {!m.endTime ? 'Live' : 'Selesai'}
                         </span>
                       </div>
                       {m.shuttlesUsed != null && <span className="mh-bola-tag">{m.shuttlesUsed} bola</span>}
                       <div className="mh-team" style={{ color: inTeam1 ? 'var(--gold)' : undefined }}>{hi(m.team1[0])} · {hi(m.team1[1])}</div>
                       <div className="mh-vs">vs</div>
-                      <div className="mh-team" style={{ color: !inTeam1 ? '#4fc3f7' : undefined }}>{hi(m.team2[0])} · {hi(m.team2[1])}</div>
+                      <div className="mh-team" style={{ color: !inTeam1 ? 'var(--teal)' : undefined }}>{hi(m.team2[0])} · {hi(m.team2[1])}</div>
                       {m.score && <div className="mh-score">{m.score}</div>}
                     </div>
                   )

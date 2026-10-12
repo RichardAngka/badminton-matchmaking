@@ -96,8 +96,8 @@ export function LedgerPanel({ state, open, onClose }: Props) {
                 <button key={f} onClick={() => setFilter(f)} style={{
                   padding: '4px 12px', borderRadius: 999, fontSize: 12, fontWeight: 500,
                   border: 'none', cursor: 'pointer',
-                  background: filter === f ? '#d4a017' : 'rgba(255,255,255,0.08)',
-                  color: filter === f ? '#000' : 'rgba(255,255,255,0.6)',
+                  background: filter === f ? 'var(--gold)' : 'rgba(250,250,248,0.07)',
+                  color: filter === f ? '#10100A' : 'var(--muted)',
                 }}>
                   {f === 'both' ? 'Semua' : f === 'member' ? 'Member' : 'Harian'}
                 </button>
@@ -126,8 +126,9 @@ export function LedgerPanel({ state, open, onClose }: Props) {
           className="w-full"
           onClick={() => exportXLSX(state)}
           disabled={rows.length === 0}
+          title={rows.length === 0 ? 'Belum ada tagihan untuk diunduh.' : undefined}
         >
-          ↓ Download XLSX
+          Unduh rekap Excel
         </Button>
       </div>}
     </div>

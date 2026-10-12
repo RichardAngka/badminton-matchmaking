@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useDialog } from '../ui'
 import type {
   Acara, Bracket, BracketKey, Day, Drag, PartaiResult, Rundown, Slot, TeamId, TourPlayer,
   TournamentState,
@@ -562,12 +563,13 @@ function JadwalForm({ target, r, label, natural, court, live, onClose, onSaveAca
     })
   }
 
+  const dialog = useDialog(onClose)
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
+      <div className="modal" {...dialog} aria-labelledby="rd-dialog" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>{acara ? 'Ubah Acara' : `Partai ${(target as { p: number }).p + 1} · ${label}`}</h2>
-          <button className="btn btn-ghost btn-sm" onClick={onClose}>✕</button>
+          <h2 id="rd-dialog">{acara ? 'Ubah acara' : `Partai ${(target as { p: number }).p + 1} · ${label}`}</h2>
+          <button className="btn btn-ghost btn-sm" onClick={onClose} aria-label="Tutup">✕</button>
         </div>
         <div className="modal-body">
           <div className="config-form">
