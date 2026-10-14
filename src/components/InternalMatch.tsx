@@ -37,8 +37,8 @@ function exportXLSX(state: TournamentState) {
 
 // Mirrors the .lvl-* badge colours in App.css — canvas can't read CSS classes.
 export const LEVEL_COLOR: Record<TourLevel, string> = {
-  'A1+': '#D4AF37', A1: '#F4E5A8', A2: '#D4AF37', B1: '#FAFAF8',
-  B2: 'rgba(250,250,248,0.72)', 'W-B1': '#D9A1AE', 'W-B2': '#D9A1AE',
+  'A1+': '#F26A6D', A1: '#F26A6D', A2: '#62A4F5', B1: '#46C488',
+  B2: '#F5974B', 'W-B1': '#F2CF4A', 'W-B2': '#B28DF5',
 }
 
 /** The four rosters side by side as one image, for the group chat. */

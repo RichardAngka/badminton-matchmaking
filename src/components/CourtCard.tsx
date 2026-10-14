@@ -134,7 +134,7 @@ export function CourtCard({ courtId, match, players, upcoming, onEndMatch, onEdi
                                 }}>
                                 {idx >= 0 && <span style={{ fontSize: 10, fontWeight: 800, color: isTeam1 ? 'var(--gold)' : 'var(--teal)', minWidth: 14 }}>{idx + 1}</span>}
                                 <div className={`status-dot ${p.status === 'Playing' ? 'playing' : 'waiting'}`} />
-                                <span className={`skill-badge skill-${p.skill}`}>{p.skill}</span>
+                                <span className={`skill-badge skill-${p.skill}${p.gender === 'F' ? ' w' : ''}`}>{p.skill}</span>
                                 {p.name}
                               </div>
                             )
@@ -181,7 +181,7 @@ export function CourtCard({ courtId, match, players, upcoming, onEndMatch, onEdi
             <div className="team">
               {t1.map(p => p && (
                 <div key={p.id} className="player-row">
-                  <span className={`skill-badge skill-${p.skill}`}>{p.skill}</span>
+                  <span className={`skill-badge skill-${p.skill}${p.gender === 'F' ? ' w' : ''}`}>{p.skill}</span>
                   <span className="player-name">{p.name}</span>
                   {p.gender === 'F' && <span className="gender-tag gender-F">W</span>}
                 </div>
@@ -191,7 +191,7 @@ export function CourtCard({ courtId, match, players, upcoming, onEndMatch, onEdi
             <div className="team team-2">
               {t2.map(p => p && (
                 <div key={p.id} className="player-row player-row-r">
-                  <span className={`skill-badge skill-${p.skill}`}>{p.skill}</span>
+                  <span className={`skill-badge skill-${p.skill}${p.gender === 'F' ? ' w' : ''}`}>{p.skill}</span>
                   <span className="player-name">{p.name}</span>
                   {p.gender === 'F' && <span className="gender-tag gender-F">W</span>}
                 </div>
@@ -254,7 +254,7 @@ export function CourtCard({ courtId, match, players, upcoming, onEndMatch, onEdi
             <div className="team">
               {upcoming.slice(0, 2).map(p => (
                 <div key={p.id} className="player-row">
-                  <span className={`skill-badge skill-${p.skill}`}>{p.skill}</span>
+                  <span className={`skill-badge skill-${p.skill}${p.gender === 'F' ? ' w' : ''}`}>{p.skill}</span>
                   <span className="player-name">{p.name}</span>
                   {p.gender === 'F' && <span className="gender-tag gender-F">W</span>}
                 </div>
@@ -264,7 +264,7 @@ export function CourtCard({ courtId, match, players, upcoming, onEndMatch, onEdi
             <div className="team team-2">
               {upcoming.slice(2, 4).map(p => (
                 <div key={p.id} className="player-row player-row-r">
-                  <span className={`skill-badge skill-${p.skill}`}>{p.skill}</span>
+                  <span className={`skill-badge skill-${p.skill}${p.gender === 'F' ? ' w' : ''}`}>{p.skill}</span>
                   <span className="player-name">{p.name}</span>
                   {p.gender === 'F' && <span className="gender-tag gender-F">W</span>}
                 </div>

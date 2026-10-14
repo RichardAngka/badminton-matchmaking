@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import type { AppState, TournamentState } from './types'
+import type { MemberLists } from './members'
 
 const url = import.meta.env.VITE_SUPABASE_URL as string
 // Supabase renamed the browser key: legacy `anon` (a JWT) -> `publishable`
@@ -76,4 +77,32 @@ export async function upsertTournament(state: TournamentState): Promise<void> {
     { onConflict: 'id' },
   )
   if (error) console.error('[supabase] tournament upsert failed:', error.message)
+}
+
+// ── Standing member lists (Selasa / Kamis) ───────────────────────────────────
+// ponytail: one more row in `tournaments`, which is already a public id → JSON
+// store kept out of the 14-day sweep; a table of its own adds a migration and
+// buys nothing until members need per-row history.
+export const MEMBERS_ID = 'members'
+
+/** null when nothing has been saved yet; throws when the read itself failed. */
+export async function fetchMembers(): Promise<MemberLists | null> {
+  if (!supabase) return null
+  const { data, error } = await supabase
+    .from('tournaments')
+    .select('state')
+    .eq('id', MEMBERS_ID)
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+  return (data?.state as MemberLists) ?? null
+}
+
+export async function upsertMembers(lists: MemberLists): Promise<MemberLists> {
+  if (!supabase) return lists
+  const { error } = await supabase.from('tournaments').upsert(
+    { id: MEMBERS_ID, state: lists, updated_at: new Date().toISOString() },
+    { onConflict: 'id' },
+  )
+  if (error) throw new Error(error.message)
+  return lists
 }

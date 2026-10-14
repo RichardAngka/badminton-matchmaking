@@ -64,13 +64,16 @@
   --muted:  rgba(250, 250, 248, 0.68);
   --dim:    rgba(250, 250, 248, 0.42);
 
-  /* Grades as a ladder, not a carnival: A reads gold, B reads bone, and the
-     second rung of each is an outline where the first is a wash. Women's
-     grades are a real second axis, so they get the one extra hue. */
-  --sa1: #F4E5A8; --sa1bg: rgba(212, 175, 55, 0.20);
-  --sa2: #D4AF37; --sa2bg: rgba(212, 175, 55, 0.07);
-  --sb1: #FAFAF8; --sb1bg: rgba(250, 250, 248, 0.11);
-  --sb2: rgba(250, 250, 248, 0.72); --sb2bg: rgba(250, 250, 248, 0.03);
+  /* Grades, one hue each as the club calls them. Women's A2/B1/B2 are their
+     own colours, so a badge reads grade and gender at a glance. Lifted
+     enough to hold their hue on navy; tints are mixed from these below. */
+  --g-a1:  #F26A6D;  /* red */
+  --g-a2:  #62A4F5;  /* blue */
+  --g-a2w: #F28DC4;  /* pink */
+  --g-b1:  #46C488;  /* green */
+  --g-b1w: #F2CF4A;  /* yellow */
+  --g-b2:  #F5974B;  /* orange */
+  --g-b2w: #B28DF5;  /* purple */
   --rose: #D9A1AE; --rosebg: rgba(217, 161, 174, 0.11);
 
   /* Shape carries hierarchy: a pill is the one primary action in a region,
@@ -352,10 +355,6 @@ body::before {
   letter-spacing: .02em;
   flex-shrink: 0;
 }
-.skill-A1 { background: var(--sa1bg); color: var(--sa1); border: 1px solid rgba(212,175,55,.45); }
-.skill-A2 { background: var(--sa2bg); color: var(--sa2); border: 1px solid rgba(212,175,55,.30); }
-.skill-B1 { background: var(--sb1bg); color: var(--sb1); border: 1px solid rgba(250,250,248,.18); }
-.skill-B2 { background: var(--sb2bg); color: var(--sb2); border: 1px solid rgba(250,250,248,.12); }
 
 .gender-tag {
   font-size: 9.5px; padding: 1px 4px; border-radius: 3px; font-weight: 600; flex-shrink: 0;
@@ -607,10 +606,6 @@ body::before {
   font-size: 13px; font-weight: 700;
   flex-shrink: 0; letter-spacing: .02em;
 }
-.avatar-A1 { background: var(--sa1bg); color: var(--sa1); border: 1px solid rgba(212,175,55,.45); }
-.avatar-A2 { background: var(--sa2bg); color: var(--sa2); border: 1px solid rgba(212,175,55,.30); }
-.avatar-B1 { background: var(--sb1bg); color: var(--sb1); border: 1px solid rgba(250,250,248,.18); }
-.avatar-B2 { background: var(--sb2bg); color: var(--sb2); border: 1px solid rgba(250,250,248,.12); }
 
 /* ── Check-in composer (/admin/player) ──────────────────────────────────────
    Checking twenty arrivals in is one task repeated, not twenty separate ones,
@@ -1438,13 +1433,6 @@ body:has(.auth-page)::after { display: none; }
    letter-spacing: .04em;
   flex-shrink: 0;
 }
-.lvl-ap  { background: var(--gold); color: #10100A; border: 1px solid var(--gold); }
-.lvl-a1  { background: var(--sa1bg); color: var(--sa1); border: 1px solid rgba(212,175,55,.45); }
-.lvl-a2  { background: var(--sa2bg); color: var(--sa2); border: 1px solid rgba(212,175,55,.30); }
-.lvl-b1  { background: var(--sb1bg); color: var(--sb1); border: 1px solid rgba(250,250,248,.18); }
-.lvl-b2  { background: var(--sb2bg); color: var(--sb2); border: 1px solid rgba(250,250,248,.12); }
-.lvl-wb1 { background: var(--rosebg); color: var(--rose); border: 1px solid rgba(217,161,174,.4); }
-.lvl-wb2 { background: transparent; color: var(--rose); border: 1px solid rgba(217,161,174,.26); }
 .lvl-luar{ background: transparent; color: var(--dim); border: 1px solid var(--border-s); }
 
 .im-pool-bar {
@@ -2191,9 +2179,6 @@ body:has(.auth-page)::after { display: none; }
 .ci-mem-chip:active { background: var(--gold-bg); border-color: var(--gold); }
 .ci-mem-chip:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 
-.ci-mem-chip[data-here] { background: none; border-color: var(--border); color: var(--dim); }
-.ci-mem-chip[data-here]:hover { color: var(--text); border-color: var(--border-s); background: var(--card-lo); }
-.ci-mem-ok { width: 14px; height: 14px; color: var(--green); flex-shrink: 0; }
 
 /* The grade rides on the chip because it is what the tap will record. */
 .ci-mem-g {
@@ -2201,10 +2186,6 @@ body:has(.auth-page)::after { display: none; }
   min-width: 25px; height: 19px; border-radius: var(--radius-xs);
   font-size: 10.5px; font-weight: 600; letter-spacing: .02em; flex-shrink: 0;
 }
-.ci-mem-g[data-g="A1"] { background: var(--sa1bg); color: var(--sa1); }
-.ci-mem-g[data-g="A2"] { background: var(--sa2bg); color: var(--sa2); }
-.ci-mem-g[data-g="B1"] { background: var(--sb1bg); color: var(--sb1); }
-.ci-mem-g[data-g="B2"] { background: var(--sb2bg); color: var(--sb2); }
 
 .ci-mem-none { margin: 2px 0 4px; font-size: 13px; line-height: 1.55; color: var(--dim); max-width: 46ch; }
 
@@ -2220,4 +2201,69 @@ body:has(.auth-page)::after { display: none; }
 @media (max-width: 560px) {
   .ci-mem-list { max-height: 236px; }
   .ci-mem-chip { min-height: 44px; font-size: 14px; }
+}
+
+/* ── Grade colours ─────────────────────────────────────────────────────────
+   Every grade badge (session players, avatars, check-in chips, the internal
+   roster) picks its hue here, so a grade is the same colour on every page.
+   `.w` marks a woman; the tournament's W-B1/W-B2 are the same hues. */
+.skill-A1, .avatar-A1, .ci-mem-g[data-g="A1"], .lvl-a1, .lvl-ap { --g: var(--g-a1); }
+.skill-A2, .avatar-A2, .ci-mem-g[data-g="A2"], .lvl-a2 { --g: var(--g-a2); }
+.skill-B1, .avatar-B1, .ci-mem-g[data-g="B1"], .lvl-b1 { --g: var(--g-b1); }
+.skill-B2, .avatar-B2, .ci-mem-g[data-g="B2"], .lvl-b2 { --g: var(--g-b2); }
+.skill-A2.w, .avatar-A2.w, .ci-mem-g[data-g="A2"].w { --g: var(--g-a2w); }
+.skill-B1.w, .avatar-B1.w, .ci-mem-g[data-g="B1"].w, .lvl-wb1 { --g: var(--g-b1w); }
+.skill-B2.w, .avatar-B2.w, .ci-mem-g[data-g="B2"].w, .lvl-wb2 { --g: var(--g-b2w); }
+
+.skill-badge, .player-avatar, .ci-mem-g[data-g], .lvl-badge:not(.lvl-luar) {
+  color: var(--g);
+  background: color-mix(in srgb, var(--g) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--g) 45%, transparent);
+}
+/* A1+ sits above A1: same red, filled solid. */
+.lvl-badge.lvl-ap { background: var(--g); color: #10100A; border-color: var(--g); }
+
+/* ── Member editor (Kelola member) ─────────────────────────────────────────
+   A list to tidy, not a form to fill: add sits on top, every row edits in
+   place, and nothing is written until Simpan. */
+.ci-mem-manage {
+  margin-left: 12px; background: none; border: none; padding: 0;
+  font: inherit; color: var(--gold); cursor: pointer;
+}
+.ci-mem-manage:hover { text-decoration: underline; text-underline-offset: 3px; }
+.ci-mem-manage:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; border-radius: 2px; }
+
+.modal.me { max-width: 560px; }
+.me select.config-input { padding-left: 8px; padding-right: 4px; }
+.me-days { margin: 14px 18px 0; flex-shrink: 0; }
+.me-days button { flex: 1; }
+.me-n { color: var(--dim); margin-left: 4px; font-variant-numeric: tabular-nums; }
+.me-add {
+  display: grid; grid-template-columns: minmax(0, 1fr) 64px 92px auto; gap: 6px;
+  padding: 12px 18px 14px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.me-list { display: flex; flex-direction: column; gap: 6px; padding-top: 12px; }
+.me-row {
+  display: grid; grid-template-columns: 30px minmax(0, 1fr) 64px 92px 34px;
+  gap: 6px; align-items: center;
+}
+.me-row .skill-badge { justify-self: center; }
+.me-del {
+  height: 34px; border: none; background: none; border-radius: var(--radius-sm);
+  color: var(--dim); cursor: pointer; font-size: 13px;
+}
+.me-del:hover { color: var(--red); background: rgba(244,96,108,.12); }
+.me-del:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; }
+.me-empty { color: var(--dim); font-size: 13px; text-align: center; padding: 24px 8px; }
+.me-foot {
+  padding: 12px 18px 16px; border-top: 1px solid var(--border); flex-shrink: 0;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.me-error { color: var(--red); font-size: 13px; line-height: 1.5; }
+.me-actions { display: flex; justify-content: flex-end; gap: 8px; }
+@media (max-width: 480px) {
+  .me-add { grid-template-columns: minmax(0, 1fr) 62px 90px; }
+  .me-add .btn { grid-column: 1 / -1; }
+  .me-row { grid-template-columns: minmax(0, 1fr) 62px 90px 30px; }
+  .me-row .skill-badge { display: none; }
 }

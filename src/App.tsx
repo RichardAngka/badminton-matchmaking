@@ -534,7 +534,7 @@ export function App() {
                     {(waitingTab === 'menunggu' ? waitingInQueue : waitingQueued).map(p => (
                       <div key={p.id} className="waiting-chip">
                         <div className="status-dot waiting" />
-                        <span className={`skill-badge skill-${p.skill}`}>{p.skill}</span>
+                        <span className={`skill-badge skill-${p.skill}${p.gender === 'F' ? ' w' : ''}`}>{p.skill}</span>
                         <span className="waiting-chip-name">{p.name}</span>
                         <span className="waiting-chip-meta">{p.gamesPlayed}x main</span>
                       </div>
@@ -549,7 +549,7 @@ export function App() {
                     {waitingNotYet.map(p => (
                       <div key={p.id} className="waiting-chip">
                         <div className="status-dot waiting" />
-                        <span className={`skill-badge skill-${p.skill}`}>{p.skill}</span>
+                        <span className={`skill-badge skill-${p.skill}${p.gender === 'F' ? ' w' : ''}`}>{p.skill}</span>
                         <span className="waiting-chip-name">{p.name}</span>
                         <span className="waiting-chip-meta">Belum main</span>
                       </div>
@@ -671,7 +671,7 @@ export function App() {
                         </div>
                         <div className="mh-body">
                           <div className="mh-team-col">
-                            {m.team1.map(id => { const p = pl(id); return <div key={id} className="mh-player"><span>{p?.name ?? '?'}</span><span className={`skill-badge skill-${p?.skill ?? 'B1'}`}>{p?.skill ?? '?'}</span></div> })}
+                            {m.team1.map(id => { const p = pl(id); return <div key={id} className="mh-player"><span>{p?.name ?? '?'}</span><span className={`skill-badge skill-${p?.skill ?? 'B1'}${p?.gender === 'F' ? ' w' : ''}`}>{p?.skill ?? '?'}</span></div> })}
                           </div>
                           <div className="mh-score-box">
                             <div className="mh-score-vs">vs</div>
@@ -684,7 +684,7 @@ export function App() {
                             ) : <div style={{ color: 'var(--dim)', fontSize: 13 }}>—</div>}
                           </div>
                           <div className="mh-team-col right">
-                            {m.team2.map(id => { const p = pl(id); return <div key={id} className="mh-player right"><span>{p?.name ?? '?'}</span><span className={`skill-badge skill-${p?.skill ?? 'B1'}`}>{p?.skill ?? '?'}</span></div> })}
+                            {m.team2.map(id => { const p = pl(id); return <div key={id} className="mh-player right"><span>{p?.name ?? '?'}</span><span className={`skill-badge skill-${p?.skill ?? 'B1'}${p?.gender === 'F' ? ' w' : ''}`}>{p?.skill ?? '?'}</span></div> })}
                           </div>
                         </div>
                       </div>
@@ -821,12 +821,12 @@ function MasterPool({ players, onAdd }: { players: Player[]; onAdd: () => void }
           ? <div className="rail-empty">Belum ada pemain.<br />Tambah lewat tombol di bawah.</div>
           : active.map(p => (
             <div key={p.id} className="pool-row">
-              <div className={`player-avatar avatar-${p.skill}`}>{initials(p.name)}</div>
+              <div className={`player-avatar avatar-${p.skill}${p.gender === 'F' ? ' w' : ''}`}>{initials(p.name)}</div>
               <div className="pool-row-name">
                 {p.name}
                 <span className="pool-row-meta">{(p.type ?? 'member') === 'harian' ? 'Harian' : 'Member'} · {p.gamesPlayed}x</span>
               </div>
-              <span className={`skill-badge skill-${p.skill}`}>{p.skill}</span>
+              <span className={`skill-badge skill-${p.skill}${p.gender === 'F' ? ' w' : ''}`}>{p.skill}</span>
             </div>
           ))}
       </div>
@@ -1171,7 +1171,7 @@ function AddToQueueModal({ state, initialSelected, submitLabel, onSubmit, onClos
                       }}>
                       {idx >= 0 && <span style={{ fontSize: 10, fontWeight: 800, color: isTeam1 ? 'var(--gold)' : 'var(--teal)', minWidth: 14 }}>{idx + 1}</span>}
                       <div className={`status-dot ${p.status === 'Playing' ? 'playing' : 'waiting'}`} />
-                      <span className={`skill-badge skill-${p.skill}`}>{p.skill}</span>
+                      <span className={`skill-badge skill-${p.skill}${p.gender === 'F' ? ' w' : ''}`}>{p.skill}</span>
                       {p.name}
                     </div>
                   )

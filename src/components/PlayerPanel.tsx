@@ -3,7 +3,8 @@ import { clickable, useDialog } from '../ui'
 import type { AppState, Match, Player, SkillLevel, Gender, PlayerStatus, PlayerType } from '../types'
 import { Button } from './ui/button'
 import { useIsAdmin } from '../RoleContext'
-import { findMember, memberDay, type Member } from '../members'
+import { findMember, memberDay, useMemberLists, type Member } from '../members'
+import { MemberEditor } from './MemberEditor'
 
 interface Props {
   open: boolean
@@ -39,7 +40,9 @@ export function PlayerPanel({ open, onClose, state, onUpdate, inline, canWrite =
   const [profileId, setProfileId] = useState<string | null>(null)
   const [filterGrade, setFilterGrade] = useState<SkillLevel | null>(null)
   const nameRef = useRef<HTMLInputElement>(null)
-  const { label: memberLabel, list: members } = memberDay(state.sessionDate)
+  const memberLists = useMemberLists()
+  const { label: memberLabel, list: members } = memberDay(state.sessionDate, memberLists.lists)
+  const [editingMembers, setEditingMembers] = useState(false)
   // What the last tap did, so every tap answers: a new check-in, a member
   // back from going home, or one who was already on the list.
   const [lastAdded, setLastAdded] = useState<{ name: string; at: number; kind: 'in' | 'back' | 'already' } | null>(null)
@@ -221,7 +224,7 @@ export function PlayerPanel({ open, onClose, state, onUpdate, inline, canWrite =
             </div>
           ) : (
             <>
-            <div className={`player-avatar avatar-${p.skill}`}>
+            <div className={`player-avatar avatar-${p.skill}${p.gender === 'F' ? ' w' : ''}`}>
               {p.name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()}
             </div>
             <div className="player-info" title={`Lihat profil ${p.name}`}
@@ -233,7 +236,7 @@ export function PlayerPanel({ open, onClose, state, onUpdate, inline, canWrite =
                 <span className={`gender-tag gender-${p.gender}`}>{p.gender === 'F' ? 'W' : 'M'}</span>
               </div>
               <div className="player-item-meta">
-                <span className={`skill-badge skill-${p.skill}`}>{p.skill}</span>
+                <span className={`skill-badge skill-${p.skill}${p.gender === 'F' ? ' w' : ''}`}>{p.skill}</span>
                 <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: (p.type ?? 'member') === 'harian' ? 'var(--gold-bg)' : 'rgba(250,250,248,.07)', color: (p.type ?? 'member') === 'harian' ? 'var(--gold)' : 'var(--muted)' }}>
                   {(p.type ?? 'member') === 'harian' ? 'Harian' : 'Member'}
                 </span>
@@ -316,16 +319,13 @@ export function PlayerPanel({ open, onClose, state, onUpdate, inline, canWrite =
   const exact = findMember(members, name)
   const presentOf = (m: Member) =>
     state.players.find(p => p.name.toLowerCase() === m.name.toLowerCase() && p.status !== 'Left')
+  // A member who is checked in moves to the roster below and leaves this list;
+  // checking them out or removing them there brings the chip back. Highest
+  // grade first — A1 down to B2 — with the chat's order breaking any tie.
   const shown = members
-    .filter(m => !query || m.name.toLowerCase().includes(query))
-    // Whoever is still missing stays at the top, so the next tap is never a
-    // scroll away late in the session. Inside that, highest grade first —
-    // A1 down to B2 — with the chat's order breaking any tie.
-    .map((m, i) => ({ m, i, here: presentOf(m) }))
-    .sort((a, b) =>
-      (a.here ? 1 : 0) - (b.here ? 1 : 0)
-      || SKILL_ORDER[a.m.skill] - SKILL_ORDER[b.m.skill]
-      || a.i - b.i)
+    .map((m, i) => ({ m, i }))
+    .filter(({ m }) => !presentOf(m) && (!query || m.name.toLowerCase().includes(query)))
+    .sort((a, b) => SKILL_ORDER[a.m.skill] - SKILL_ORDER[b.m.skill] || a.i - b.i)
   const hadir = members.filter(m => presentOf(m)).length
   const isGuest = Boolean(query) && !exact   // a name nobody on the list has
 
@@ -360,29 +360,33 @@ export function PlayerPanel({ open, onClose, state, onUpdate, inline, canWrite =
       <div className="ci-mem">
         <div className="ci-mem-h">
           <span>Member tetap {memberLabel}</span>
-          <span className="ci-mem-n">{hadir} hadir, {members.length - hadir} belum</span>
+          <span className="ci-mem-n">
+            {hadir} hadir, {members.length - hadir} belum
+            <button className="ci-mem-manage" onClick={() => setEditingMembers(true)}>Kelola member</button>
+          </span>
         </div>
+        {editingMembers && (
+          <MemberEditor {...memberLists} onClose={() => setEditingMembers(false)} />
+        )}
         <div className="ci-mem-list">
-          {shown.map(({ m, here }) => (
+          {shown.map(({ m }) => (
             <button
               key={m.name}
               className="ci-mem-chip"
-              data-here={here ? '' : undefined}
-              title={here
-                ? `${m.name} sudah check-in`
-                : `Check-in ${m.name}, grade ${m.skill}`}
+              title={`Check-in ${m.name}, grade ${m.skill}`}
               onClick={() => addPlayer(m)}
             >
-              {here
-                ? <svg className="ci-mem-ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
-                : <span className="ci-mem-g" data-g={m.skill}>{m.skill}</span>}
+              <span className={`ci-mem-g${m.gender === 'F' ? ' w' : ''}`} data-g={m.skill}>{m.skill}</span>
               {m.name}
             </button>
           ))}
           {shown.length === 0 && (
             <p className="ci-mem-none">
-              Tidak ada member bernama “{name.trim()}”. Tekan Check-in untuk
-              menambahkannya sebagai pemain baru.
+              {exact && presentOf(exact)
+                ? `${exact.name} sudah check-in, ada di daftar pemain di bawah.`
+                : query
+                  ? `Tidak ada member bernama “${name.trim()}”. Tekan Check-in untuk menambahkannya sebagai pemain baru.`
+                  : `Semua member ${memberLabel} sudah check-in.`}
             </p>
           )}
         </div>
@@ -504,7 +508,7 @@ function PlayerProfileModal({ player, matches, allPlayers, onClose }: {
             <div>
               <div style={{ fontSize: 18, fontWeight: 700 }}>{player.name}</div>
               <div style={{ display: 'flex', gap: 6, marginTop: 4, alignItems: 'center' }}>
-                <span className={`skill-badge skill-${player.skill}`}>{player.skill}</span>
+                <span className={`skill-badge skill-${player.skill}${player.gender === 'F' ? ' w' : ''}`}>{player.skill}</span>
                 <span className={`gender-tag gender-${player.gender}`}>{player.gender === 'F' ? 'W' : 'M'}</span>
                 <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: (player.type ?? 'member') === 'harian' ? 'var(--gold-bg)' : 'rgba(250,250,248,.07)', color: (player.type ?? 'member') === 'harian' ? 'var(--gold)' : 'var(--muted)' }}>
                   {(player.type ?? 'member') === 'harian' ? 'Harian' : 'Member'}

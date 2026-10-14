@@ -1,16 +1,22 @@
+import { useQuery } from '@tanstack/react-query'
 import type { Gender, SkillLevel } from './types'
+import { fetchMembers } from './supabase'
 
 // Member tetap PB SOR, per hari main. Separate from AppState.players: that is
 // one session's check-ins, this is the standing list the check-in form reads.
 // Grades come from the tournament roster in internalMatch.ts SEED, with A1+
 // folded into A1 (SkillLevel has no A1+) and W-B1/W-B2 read as B1/B2 + female.
 export interface Member { name: string; skill: SkillLevel; gender?: Gender }
+export type MemberDay = 'selasa' | 'kamis'
+export type MemberLists = Record<MemberDay, Member[]>
 
 const F: Gender = 'F'
 
 // ponytail: names not in SEED (Lix, Frederick, david, Mz) default to B1 — fix the
 // grade here when someone says what it is, no other file needs to change.
-export const MEMBERS: Record<'selasa' | 'kamis', Member[]> = {
+// The starting lists. Once an admin saves from "Kelola member" the saved copy
+// in Supabase wins and these are never read again.
+export const MEMBERS: MemberLists = {
   selasa: [
     { name: 'Super Lim', skill: 'A2' },
     { name: 'Felix Ig', skill: 'B2' },
@@ -81,16 +87,29 @@ export const MEMBERS: Record<'selasa' | 'kamis', Member[]> = {
  * Thursday's, and on any other day both merged (first entry wins) so the form
  * still autofills.
  */
-export function memberDay(sessionDate: string): { label: string; list: Member[] } {
+export function memberDay(sessionDate: string, lists: MemberLists = MEMBERS): { label: string; list: Member[] } {
   const day = new Date(`${sessionDate}T00:00:00`).getDay()
-  if (day === 2) return { label: 'Selasa', list: MEMBERS.selasa }
-  if (day === 4) return { label: 'Kamis', list: MEMBERS.kamis }
+  if (day === 2) return { label: 'Selasa', list: lists.selasa }
+  if (day === 4) return { label: 'Kamis', list: lists.kamis }
   const seen = new Set<string>()
-  const list = [...MEMBERS.selasa, ...MEMBERS.kamis].filter(m => {
+  const list = [...lists.selasa, ...lists.kamis].filter(m => {
     const k = m.name.toLowerCase()
     return seen.has(k) ? false : (seen.add(k), true)
   })
   return { label: 'Selasa + Kamis', list }
+}
+
+/**
+ * The live lists. `ready` is false until the saved copy has loaded: the editor
+ * must not save over the real lists from the starting ones after a failed read.
+ */
+export function useMemberLists() {
+  const q = useQuery({
+    queryKey: ['members'],
+    queryFn: async () => (await fetchMembers()) ?? MEMBERS,
+    staleTime: 5 * 60_000,
+  })
+  return { lists: q.data ?? MEMBERS, ready: q.isSuccess, failed: q.isError }
 }
 
 /** Exact name match, case-insensitive — what the check-in form autofills from. */

@@ -105,7 +105,7 @@ export function LedgerPanel({ state, open, onClose }: Props) {
             </div>
             {filtered.map(p => (
               <div key={p.id} className="ledger-row">
-                <div className={`player-avatar avatar-${p.skill}`}>{initials(p.name)}</div>
+                <div className={`player-avatar avatar-${p.skill}${p.gender === 'F' ? ' w' : ''}`}>{initials(p.name)}</div>
                 <div className="ledger-name-block">
                   <div className="ledger-name">{p.name}</div>
                   <div className="ledger-name-sub">
