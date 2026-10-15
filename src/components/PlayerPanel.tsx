@@ -317,16 +317,18 @@ export function PlayerPanel({ open, onClose, state, onUpdate, inline, canWrite =
      member, and stay out of the way when it is. */
   const query = name.trim().toLowerCase()
   const exact = findMember(members, name)
-  const presentOf = (m: Member) =>
-    state.players.find(p => p.name.toLowerCase() === m.name.toLowerCase() && p.status !== 'Left')
-  // A member who is checked in moves to the roster below and leaves this list;
-  // checking them out or removing them there brings the chip back. Highest
-  // grade first — A1 down to B2 — with the chat's order breaking any tie.
+  const rosterOf = (m: Member) =>
+    state.players.find(p => p.name.toLowerCase() === m.name.toLowerCase())
+  // A tapped member moves to the roster below and leaves this list until they
+  // are removed (✕) there. Checking out keeps them off it: their row's own
+  // Check-in button brings them back. Highest grade first — A1 down to B2 —
+  // with the chat's order breaking any tie.
   const shown = members
     .map((m, i) => ({ m, i }))
-    .filter(({ m }) => !presentOf(m) && (!query || m.name.toLowerCase().includes(query)))
+    .filter(({ m }) => !rosterOf(m) && (!query || m.name.toLowerCase().includes(query)))
     .sort((a, b) => SKILL_ORDER[a.m.skill] - SKILL_ORDER[b.m.skill] || a.i - b.i)
-  const hadir = members.filter(m => presentOf(m)).length
+  const hadir = members.filter(m => { const p = rosterOf(m); return p && p.status !== 'Left' }).length
+  const belum = members.filter(m => !rosterOf(m)).length
   const isGuest = Boolean(query) && !exact   // a name nobody on the list has
 
   const composer = (
@@ -361,7 +363,7 @@ export function PlayerPanel({ open, onClose, state, onUpdate, inline, canWrite =
         <div className="ci-mem-h">
           <span>Member tetap {memberLabel}</span>
           <span className="ci-mem-n">
-            {hadir} hadir, {members.length - hadir} belum
+            {hadir} hadir, {belum} belum
             <button className="ci-mem-manage" onClick={() => setEditingMembers(true)}>Kelola member</button>
           </span>
         </div>
@@ -382,8 +384,8 @@ export function PlayerPanel({ open, onClose, state, onUpdate, inline, canWrite =
           ))}
           {shown.length === 0 && (
             <p className="ci-mem-none">
-              {exact && presentOf(exact)
-                ? `${exact.name} sudah check-in, ada di daftar pemain di bawah.`
+              {exact && rosterOf(exact)
+                ? `${exact.name} sudah ada di daftar pemain di bawah.`
                 : query
                   ? `Tidak ada member bernama “${name.trim()}”. Tekan Check-in untuk menambahkannya sebagai pemain baru.`
                   : `Semua member ${memberLabel} sudah check-in.`}
