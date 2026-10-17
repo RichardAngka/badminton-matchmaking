@@ -22,7 +22,7 @@ import { useCaptainTeam, useIsAdmin } from './RoleContext'
 import { clickable, useDialog } from './ui'
 
 const INTERNAL_TABS: [string, string][] = [
-  ['/internal-match', 'Tim'],
+  ['/internal', 'Tim'],
   ['/internal/player', 'Baju'],
   ['/internal/tournament', 'Bagan'],
   ['/internal/lineup', 'Line-up'],
@@ -53,7 +53,8 @@ export function App() {
     '/waiting-list': 'antrian',
     '/history': 'riwayat',
     '/player': 'pemain',
-    '/internal-match': 'internal',
+    '/internal': 'internal',
+    '/internal-match': 'internal',  // old link, same page as /internal
     '/internal/player': 'internal',
     '/internal/tournament': 'internal',
     '/internal/lineup': 'internal',
@@ -66,9 +67,10 @@ export function App() {
     antrian: '/waiting-list',
     riwayat: '/history',
     pemain: '/player',
-    internal: '/internal-match',
+    internal: '/internal',
   }
   const mainTab: Tab = ROUTE_TAB[pathname] ?? 'lapangan'
+  const tabPath = pathname === '/internal-match' ? '/internal' : pathname
   // An unknown path inside the tool falls back to the courts; the URL is
   // corrected to match rather than left pointing at a page that is not there.
   const known = pathname in ROUTE_TAB
@@ -334,6 +336,12 @@ export function App() {
             <Icon name="users" /><span>Pemain</span>
             {state.players.filter(p => p.status !== 'Left').length > 0 && <span className="nav-count">{state.players.filter(p => p.status !== 'Left').length}</span>}
           </button>
+          {/* ponytail: hidden entry — only shows once you've typed /admin/internal */}
+          {mainTab === 'internal' && (
+            <button className="nav-item active" onClick={() => setMainTab('internal')}>
+              <Icon name="trophy" /><span>Internal</span>
+            </button>
+          )}
         </nav>
         <div className="sidebar-foot">
           <button className="nav-item" style={{ color: 'var(--muted)' }}
@@ -696,16 +704,16 @@ export function App() {
 
           {mainTab === 'internal' && (
             <>
-              {/* Two internal views under one nav item. The team builder keeps
-                  its original /internal-match URL so existing links survive. */}
+              {/* Internal views under one nav item. /internal-match is the old
+                  URL of the team builder, kept so existing links survive. */}
               <div className="im-segmented im-tabs" role="group" aria-label="Halaman internal">
                 {INTERNAL_TABS
                   .filter(([path]) => isAdmin || captainTeam || path !== '/internal/absen')
                   .map(([path, label]) => (
                   <button
                     key={path}
-                    className={`im-seg${pathname === path ? ' on' : ''}`}
-                    aria-pressed={pathname === path}
+                    className={`im-seg${tabPath === path ? ' on' : ''}`}
+                    aria-pressed={tabPath === path}
                     onClick={() => navigate(path)}
                   >
                     <span className="im-tab-label">{label}</span>
