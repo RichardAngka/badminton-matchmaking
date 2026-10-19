@@ -39,9 +39,6 @@ function goldAt(t: number) {
 const loadPublic = async (): Promise<TournamentState> =>
   applyJersey((await fetchTournament()) ?? seedState())
 
-// Player photos, keyed by player id, served from public/players/. Empty until
-// the shoot happens — every player falls back to their initials until then.
-const PHOTOS: Record<string, string> = {}
 
 const initials = (name: string) =>
   name.split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase()
@@ -98,7 +95,7 @@ function Stage({ title, roster }: { title: string; roster: TourPlayer[] }) {
       <p className="sx-stage-cap">{title}</p>
 
       <div className="sx-slide">
-        {PHOTOS[p.id] && <img className="sx-slide-img" src={PHOTOS[p.id]} alt="" />}
+        {p.photo && <img className="sx-slide-img" src={p.photo} alt="" />}
         <span className="sx-slide-no">{p.number ?? initials(p.name)}</span>
 
         <button
@@ -132,8 +129,9 @@ function Stage({ title, roster }: { title: string; roster: TourPlayer[] }) {
 }
 
 function Face({ p }: { p: TourPlayer }) {
-  return PHOTOS[p.id]
-    ? <img src={PHOTOS[p.id]} alt="" loading="lazy" />
+  // Photos are set on /admin/internal/player; anyone without one shows initials.
+  return p.photo
+    ? <img src={p.photo} alt="" loading="lazy" />
     : <span className="sx-row-num">{initials(p.name)}</span>
 }
 

@@ -23,7 +23,7 @@ import { clickable, useDialog } from './ui'
 
 const INTERNAL_TABS: [string, string][] = [
   ['/internal', 'Tim'],
-  ['/internal/player', 'Baju'],
+  ['/internal/player', 'Roster'],
   ['/internal/tournament', 'Bagan'],
   ['/internal/lineup', 'Line-up'],
   ['/internal/jadwal', 'Jadwal'],
@@ -336,9 +336,18 @@ export function App() {
             <Icon name="users" /><span>Pemain</span>
             {state.players.filter(p => p.status !== 'Left').length > 0 && <span className="nav-count">{state.players.filter(p => p.status !== 'Left').length}</span>}
           </button>
+          {/* The roster behind /rank — photos, numbers, names. Admin-only: the
+              rest of the internal tool stays behind the hidden entry below. */}
+          {isAdmin && (
+            <button className={`nav-item nav-desk${pathname === '/internal/player' ? ' active' : ''}`}
+              onClick={() => navigate('/internal/player')}>
+              <Icon name="flag" /><span>Ranking</span>
+            </button>
+          )}
           {/* ponytail: hidden entry — only shows once you've typed /admin/internal */}
           {mainTab === 'internal' && (
-            <button className="nav-item active" onClick={() => setMainTab('internal')}>
+            <button className={`nav-item nav-desk${pathname !== '/internal/player' ? ' active' : ''}`}
+              onClick={() => setMainTab('internal')}>
               <Icon name="trophy" /><span>Internal</span>
             </button>
           )}
@@ -384,6 +393,15 @@ export function App() {
               aria-label="Buka kas hari ini" title="Kas hari ini"><Icon name="wallet" /></button>
             {isAdmin && <button className="icon-btn" onClick={() => setConfigOpen(true)}
               aria-label="Buka konfigurasi sesi" title="Konfigurasi sesi"><Icon name="gear" /></button>}
+            {/* The bottom bar keeps the five court tabs; Ranking moves up here
+                on phones, and Internal needs no slot — its own sub-tabs show. */}
+            {isAdmin && (
+              <button className="icon-btn sidebar-foot-mobile" onClick={() => navigate('/internal/player')}
+                aria-label="Ranking" title="Ranking"
+                aria-current={pathname === '/internal/player' ? 'page' : undefined}>
+                <Icon name="flag" />
+              </button>
+            )}
             <button className="icon-btn sidebar-foot-mobile" aria-label="Keluar" title="Keluar"
               onClick={() => supabase?.auth.signOut()}>
               <Icon name="logout" />

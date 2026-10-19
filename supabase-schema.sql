@@ -48,3 +48,13 @@ CREATE POLICY "public update" ON tournaments FOR UPDATE USING (true);
 -- other open device immediately instead of on the next 60s poll.
 -- Run this once in the SQL Editor; the table itself already exists.
 ALTER PUBLICATION supabase_realtime ADD TABLE tournaments;
+
+
+-- ── Player photos (/internal/player → rankings) ─────────────────────────────
+-- Public bucket so the landing page can show photos; only signed-in admins write.
+-- ponytail: old photos are not deleted on replace; clean the bucket by hand if it grows.
+INSERT INTO storage.buckets (id, name, public) VALUES ('players', 'players', true)
+  ON CONFLICT (id) DO NOTHING;
+
+CREATE POLICY "players photo upload" ON storage.objects
+  FOR INSERT TO authenticated WITH CHECK (bucket_id = 'players');

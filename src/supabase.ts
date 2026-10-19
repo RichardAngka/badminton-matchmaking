@@ -79,6 +79,19 @@ export async function upsertTournament(state: TournamentState): Promise<void> {
   if (error) console.error('[supabase] tournament upsert failed:', error.message)
 }
 
+const PHOTO_BUCKET = 'players'
+
+/** Uploads a player photo and returns its public URL. Throws on failure. */
+export async function uploadPlayerPhoto(file: File, playerId: string): Promise<string> {
+  if (!supabase) throw new Error('Supabase belum dikonfigurasi')
+  // A fresh path per upload, so a replaced photo is never served from cache.
+  const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
+  const path = `${playerId}-${Date.now()}.${ext}`
+  const { error } = await supabase.storage.from(PHOTO_BUCKET).upload(path, file, { contentType: file.type })
+  if (error) throw new Error(error.message)
+  return supabase.storage.from(PHOTO_BUCKET).getPublicUrl(path).data.publicUrl
+}
+
 // ── Standing member lists (Selasa / Kamis) ───────────────────────────────────
 // ponytail: one more row in `tournaments`, which is already a public id → JSON
 // store kept out of the 14-day sweep; a table of its own adds a migration and
