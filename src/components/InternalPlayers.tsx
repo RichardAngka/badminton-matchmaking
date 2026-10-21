@@ -18,7 +18,21 @@ function parseNumber(v: string): number | undefined {
 function parsePhotoUrl(v: string): string | undefined | null {
   const t = v.trim()
   if (!t) return undefined
+  // A Drive share link (…/file/d/<id>/view, or ?id=<id>) is a viewer page, not
+  // an image; the thumbnail endpoint serves the file itself, resized. The file
+  // must be shared as "anyone with the link".
+  const drive = /^https:\/\/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?(?:.*&)?id=)([\w-]+)/.exec(t)
+  if (drive) return `https://drive.google.com/thumbnail?id=${drive[1]}&sz=w1000`
   try { return /^https?:$/.test(new URL(t).protocol) ? t : null } catch { return null }
+}
+
+if (import.meta.env.DEV) {
+  const thumb = 'https://drive.google.com/thumbnail?id=1flOg0hS0VLF4D-zYGVC6p8dSYPGq1U5y&sz=w1000'
+  console.assert(parsePhotoUrl('https://drive.google.com/file/d/1flOg0hS0VLF4D-zYGVC6p8dSYPGq1U5y/view?usp=share_link') === thumb, '[photo] drive share link')
+  console.assert(parsePhotoUrl('https://drive.google.com/open?id=1flOg0hS0VLF4D-zYGVC6p8dSYPGq1U5y') === thumb, '[photo] drive open link')
+  console.assert(parsePhotoUrl(thumb) === thumb, '[photo] thumbnail link not stable')
+  console.assert(parsePhotoUrl('https://x.com/a.jpg') === 'https://x.com/a.jpg', '[photo] plain link changed')
+  console.assert(parsePhotoUrl('javascript:alert(1)') === null, '[photo] non-http accepted')
 }
 
 const MAX_PHOTO_MB = 5

@@ -84,6 +84,10 @@ export function App() {
 
   const isAdmin = useIsAdmin()
   const captainTeam = useCaptainTeam()
+  // ponytail: "signed in" = has a role; a role-less account sees "Masuk", which
+  // still signs it out first, so the button is never a dead end.
+  const signedIn = isAdmin || captainTeam !== null
+  const signOutToLogin = () => (supabase?.auth.signOut() ?? Promise.resolve()).then(() => navigate('/login'))
   const isHistorical = selectedDate !== TODAY
 
   // Main state query — keyed by date so switching sessions re-fetches cleanly
@@ -354,8 +358,8 @@ export function App() {
         </nav>
         <div className="sidebar-foot">
           <button className="nav-item" style={{ color: 'var(--muted)' }}
-            onClick={() => supabase?.auth.signOut()} title="Keluar">
-            <Icon name="logout" /><span>Keluar</span>
+            onClick={signOutToLogin} title={signedIn ? 'Keluar' : 'Masuk'}>
+            <Icon name="logout" /><span>{signedIn ? 'Keluar' : 'Masuk'}</span>
           </button>
         </div>
       </aside>
@@ -402,8 +406,8 @@ export function App() {
                 <Icon name="flag" />
               </button>
             )}
-            <button className="icon-btn sidebar-foot-mobile" aria-label="Keluar" title="Keluar"
-              onClick={() => supabase?.auth.signOut()}>
+            <button className="icon-btn sidebar-foot-mobile" aria-label={signedIn ? 'Keluar' : 'Masuk'}
+              title={signedIn ? 'Keluar' : 'Masuk'} onClick={signOutToLogin}>
               <Icon name="logout" />
             </button>
             {/* A button that can never be enabled is noise, so captains and

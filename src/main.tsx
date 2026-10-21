@@ -12,7 +12,7 @@ const qc = new QueryClient()
 // The public page owns the root; the matchmaking tool lives under /admin.
 // Branching here instead of inside App keeps the public page clear of the auth
 // gate and of App's session hooks — it reads one roster row and nothing else.
-// ponytail: obscurity, not security; the gate inside AuthGate is the real one.
+// Anyone may view /admin; AuthGate only decides who gets to edit.
 const isAdminApp = /^\/admin(\/|$)/.test(window.location.pathname)
 
 // Anything outside the two public pages goes back to the front door rather than

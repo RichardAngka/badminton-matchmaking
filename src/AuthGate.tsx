@@ -41,9 +41,9 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     return <RoleCtx.Provider value={role}>{children}</RoleCtx.Provider>
   }
 
-  // ponytail: always back to /login, no return-to; add a location-state hop if
-  // deep links into the tool ever get shared.
-  if (pathname !== '/login') return <Navigate to="/login" replace />
+  // Signed-out visitors see the tool read-only: RoleCtx's default is a viewer,
+  // and every write control already hides behind useIsAdmin / useCaptainTeam.
+  if (pathname !== '/login') return <>{children}</>
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
