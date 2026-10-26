@@ -5,7 +5,8 @@ import {
   loadStateForDate, persistState, getActiveCourts, getActiveMatchMap, DEFAULT_STATE,
 } from './store'
 import { listRemoteSessions, supabase } from './supabase'
-import { findBestFour } from './matchmaker'
+import { bestPairing, findTopFour, type Rec } from './matchmaker'
+import { useStats, winProb, type Met, type Power } from './ratings'
 import type { AppState, Match, Player, PlayerStatus, TimeSlot } from './types'
 import { CourtCard } from './components/CourtCard'
 import { LedgerPanel } from './components/LedgerPanel'
@@ -43,6 +44,8 @@ export function App() {
   const [editingMatch, setEditingMatch] = useState<{ id: string; bola: number; scoreL: string; scoreR: string } | null>(null)
   const [ledgerOpen, setLedgerOpen] = useState(false)
   const [assignQueueIdx, setAssignQueueIdx] = useState<number | null>(null)
+  // Snapshot taken on open: re-ranking on every realtime save would shuffle the cards under a finger.
+  const [recs, setRecs] = useState<Rec[] | null>(null)
   const [waitingTab, setWaitingTab] = useState<'menunggu' | 'antrian'>('menunggu')
   const { pathname } = useLocation()
   const navigate = useNavigate()
@@ -77,7 +80,7 @@ export function App() {
   useEffect(() => { if (!known) navigate('/', { replace: true }) }, [known, navigate])
   const setMainTab = (tab: Tab) => navigate(TAB_ROUTE[tab])
 
-  const anyModalOpen = queueOpen || editingQueueIdx !== null || assignQueueIdx !== null || configOpen || editingMatch !== null || ledgerOpen
+  const anyModalOpen = queueOpen || recs !== null || editingQueueIdx !== null || assignQueueIdx !== null || configOpen || editingMatch !== null || ledgerOpen
   useEffect(() => {
     document.body.style.overflow = anyModalOpen ? 'hidden' : ''
   }, [anyModalOpen])
@@ -126,6 +129,8 @@ export function App() {
     onSuccess: s => qc.setQueryData(['state', selectedDate], s),
   })
 
+  const { power, met } = useStats(state, selectedDate, isAdmin)
+
   const activeCourts   = getActiveCourts(state)
   const activeMatchMap = getActiveMatchMap(state)
   const allCourtIds    = Array.from({ length: activeCourts }, (_, i) => i + 1)
@@ -143,18 +148,6 @@ export function App() {
   const hhmm   = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`
   const slot   = state.timeSlots.find(s => hhmm >= s.start && hhmm < s.end)
 
-  function buildPastSets(matches: typeof state.matches) {
-    const pastPairs = new Set(matches.flatMap(m => [
-      [...m.team1].sort().join('|'),
-      [...m.team2].sort().join('|'),
-    ]))
-    const pastOpponents = new Set(matches.flatMap(m => {
-      const [a, b] = m.team1, [c, d] = m.team2
-      return [[a,c],[a,d],[b,c],[b,d]].map(p => p.sort().join('|'))
-    }))
-    return { pastPairs, pastOpponents }
-  }
-
   function addToQueue(four: [string, string, string, string]) {
     if (!isAdmin) return
     mut.mutate({ ...state, pregenerated: [...(state.pregenerated ?? []), four] })
@@ -170,12 +163,9 @@ export function App() {
     mut.mutate({ ...state, pregenerated: (state.pregenerated ?? []).map((item, i) => i === idx ? four : item) })
   }
 
-  function generateOneToQueue() {
+  function openRecs() {
     if (!isAdmin) return
-    const { pastPairs, pastOpponents } = buildPastSets(state.matches)
-    const four = findBestFour(availableForQueue, pastPairs, pastOpponents)
-    if (!four) return
-    addToQueue([four[0].id, four[1].id, four[2].id, four[3].id])
+    setRecs(findTopFour(availableForQueue, met, power))
   }
 
   function startFromQueue(queueIdx: number, courtId: number) {
@@ -439,11 +429,11 @@ export function App() {
             <div className="controls-bar">
               <button
                 className="btn btn-ghost btn-sm"
-                onClick={generateOneToQueue}
+                onClick={openRecs}
                 disabled={availableForQueue.length < 4}
                 title={availableForQueue.length < 4
                   ? `Perlu 4 pemain yang belum diantrikan — baru ada ${availableForQueue.length}.`
-                  : 'Pilih empat pemain yang paling lama menunggu dan antrikan'}
+                  : 'Lihat 4 susunan match, dari yang paling seimbang'}
               >
                 <Icon name="bolt" /> Susun otomatis
               </button>
@@ -566,6 +556,7 @@ export function App() {
                         <div className="status-dot waiting" />
                         <span className={`skill-badge skill-${p.skill}${p.gender === 'F' ? ' w' : ''}`}>{p.skill}</span>
                         <span className="waiting-chip-name">{p.name}</span>
+                        {isAdmin && <span className="power-num" title="Power">{power(p)}</span>}
                         <span className="waiting-chip-meta">{p.gamesPlayed}x main</span>
                       </div>
                     ))}
@@ -581,6 +572,7 @@ export function App() {
                         <div className="status-dot waiting" />
                         <span className={`skill-badge skill-${p.skill}${p.gender === 'F' ? ' w' : ''}`}>{p.skill}</span>
                         <span className="waiting-chip-name">{p.name}</span>
+                        {isAdmin && <span className="power-num" title="Power">{power(p)}</span>}
                         <span className="waiting-chip-meta">Belum main</span>
                       </div>
                     ))}
@@ -601,7 +593,7 @@ export function App() {
                   <button className="btn btn-primary btn-sm" onClick={() => setQueueOpen(true)}>
                     Pilih pemain sendiri
                   </button>
-                  <button className="btn btn-ghost btn-sm" onClick={generateOneToQueue}
+                  <button className="btn btn-ghost btn-sm" onClick={openRecs}
                     disabled={availableForQueue.length < 4}>
                     Susun otomatis
                   </button>
@@ -635,6 +627,10 @@ export function App() {
                       <div className="mh-team">{n(four[0])} / {n(four[1])}</div>
                       <div className="mh-vs">vs</div>
                       <div className="mh-team">{n(four[2])} / {n(four[3])}</div>
+                      {isAdmin && (() => {
+                        const ps = four.map(id => state.players.find(p => p.id === id))
+                        return ps.every(p => p) && <WinBar compact p1={teamP1(ps as Player[], power)} />
+                      })()}
                       {isAdmin && (
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }} onClick={e => e.stopPropagation()}>
                           <button
@@ -787,8 +783,19 @@ export function App() {
       {queueOpen && (
         <AddToQueueModal
           state={state}
+          power={power}
+          met={met}
           onSubmit={four => { addToQueue(four); setQueueOpen(false) }}
           onClose={() => setQueueOpen(false)}
+        />
+      )}
+
+      {recs !== null && (
+        <RecommendModal
+          recs={recs}
+          power={power}
+          onPick={r => { addToQueue(r.four.map(p => p.id) as [string, string, string, string]); setRecs(null) }}
+          onClose={() => setRecs(null)}
         />
       )}
 
@@ -804,6 +811,8 @@ export function App() {
       {editingQueueIdx !== null && (
         <AddToQueueModal
           state={state}
+          power={power}
+          met={met}
           initialSelected={(state.pregenerated ?? [])[editingQueueIdx] ?? []}
           submitLabel="Simpan antrian"
           onSubmit={four => { replaceInQueue(editingQueueIdx, four); setEditingQueueIdx(null) }}
@@ -1109,17 +1118,116 @@ function ConfigModal({ state, onSave, onClose, onHardReset }: ConfigModalProps) 
   )
 }
 
+// ── Power & recommendations ───────────────────────────────────────────────────
+
+const teamP1 = (ps: Player[], power: Power) =>
+  winProb((power(ps[0]) + power(ps[1])) / 2, (power(ps[2]) + power(ps[3])) / 2)
+
+/** Team 1's chance against team 2 as one bar: gold pulls left, steel right, the notch is even. */
+function WinBar({ p1, powers, compact }: { p1: number; powers?: [number, number]; compact?: boolean }) {
+  const pct = Math.round(p1 * 100)
+  return (
+    <span className={`winbar${compact ? ' compact' : ''}`} role="img"
+      aria-label={`Peluang menang: tim 1 ${pct}%, tim 2 ${100 - pct}%`}>
+      <span className="winbar-side t1">
+        <span className="winbar-pct">{pct}%</span>
+        {powers && <span className="winbar-power">{powers[0]}</span>}
+      </span>
+      <span className="winbar-track"><span className="winbar-fill" style={{ width: `${pct}%` }} /></span>
+      <span className="winbar-side t2">
+        <span className="winbar-pct">{100 - pct}%</span>
+        {powers && <span className="winbar-power">{powers[1]}</span>}
+      </span>
+    </span>
+  )
+}
+
+interface RecommendProps {
+  recs: Rec[]
+  power: Power
+  onPick: (r: Rec) => void
+  onClose: () => void
+}
+
+function RecommendModal({ recs, power, onPick, onClose }: RecommendProps) {
+  const dialog = useDialog(onClose)
+  const avg = (a: Player, b: Player) => Math.round((power(a) + power(b)) / 2)
+  const pinned = recs[0]?.four.find(p => recs.every(r => r.four.includes(p)))
+  // Spans, not divs: the whole card is one button.
+  const row = (p: Player, right?: boolean) => (
+    <span key={p.id} className={`mh-player${right ? ' right' : ''}`}>
+      <span className={`skill-badge skill-${p.skill}${p.gender === 'F' ? ' w' : ''}`}>{p.skill}</span>
+      <span>{p.name}</span>
+    </span>
+  )
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" {...dialog} aria-labelledby="rec-title" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2 id="rec-title">Susun otomatis</h2>
+          <button className="btn btn-ghost btn-sm" onClick={onClose} aria-label="Tutup">✕</button>
+        </div>
+        <div className="modal-body">
+          {recs.length === 0 ? (
+            <p className="rec-empty">
+              Tidak ada susunan yang lolos aturan gender. Pilih pemainnya sendiri lewat Match baru.
+            </p>
+          ) : (
+            <>
+              <p className="config-label">
+                Diurutkan dari yang paling seimbang.
+                {pinned && <> Semua memuat <strong>{pinned.name}</strong>, yang paling lama menunggu.</>}
+                {' '}Pilih satu untuk masuk antrian.
+              </p>
+              <ol className="rec-list">
+                {recs.map((r, i) => {
+                  const [a, b, c, d] = r.four
+                  const tag = i === 0 ? 'Best match' : i === recs.length - 1 ? 'Worst' : null
+                  return (
+                    <li key={r.four.map(p => p.id).join()}>
+                      <button className={`rec-card${i === 0 ? ' best' : ''}`} onClick={() => onPick(r)}>
+                        <span className="rec-rank">{i + 1}</span>
+                        <span className="rec-main">
+                          {(tag || r.lopsided) && (
+                            <span className="rec-tags">
+                              {tag && <span className={`rec-tag ${i === 0 ? 'best' : 'worst'}`}>{tag}</span>}
+                              {r.lopsided && <span className="rec-tag lop">Timpang</span>}
+                            </span>
+                          )}
+                          <span className="mh-body">
+                            <span className="mh-team-col">{row(a)}{row(b)}</span>
+                            <span className="mh-vs">vs</span>
+                            <span className="mh-team-col right">{row(c, true)}{row(d, true)}</span>
+                          </span>
+                          <WinBar p1={r.p1} powers={[avg(a, b), avg(c, d)]} />
+                        </span>
+                      </button>
+                    </li>
+                  )
+                })}
+              </ol>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Add to Queue modal ────────────────────────────────────────────────────────
 
 interface AddQueueProps {
   state: AppState
+  power: Power
+  met: Met
   initialSelected?: string[]
   submitLabel?: string
   onSubmit: (four: [string, string, string, string]) => void
   onClose: () => void
 }
 
-function AddToQueueModal({ state, initialSelected, submitLabel, onSubmit, onClose }: AddQueueProps) {
+function AddToQueueModal({ state, power, met, initialSelected, submitLabel, onSubmit, onClose }: AddQueueProps) {
   const [selected, setSelected] = useState<string[]>(initialSelected ?? [])
   const [warning, setWarning] = useState<string | null>(null)
   const [skippedFirst, setSkippedFirst] = useState<string | null>(null)
@@ -1173,6 +1281,18 @@ function AddToQueueModal({ state, initialSelected, submitLabel, onSubmit, onClos
   const ready = selected.length === 4
   const dialog = useDialog(onClose)
 
+  // The same scoring as Susun otomatis, for the four picked by hand. Splits
+  // always keep the first pick on team 1, so it is this split iff slot 2 matches.
+  const found = selected.map(id => state.players.find(p => p.id === id)).filter((p): p is Player => !!p)
+  const picked = ready && found.length === 4 ? found : null
+  const best = picked && bestPairing(picked, power, met)
+  function applyBest() {
+    if (!best) return
+    setWarning(null)
+    setSkippedFirst(null)
+    setSelected(best.four.map(p => p.id))
+  }
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" {...dialog} aria-labelledby="queue-title" onClick={e => e.stopPropagation()}>
@@ -1203,6 +1323,7 @@ function AddToQueueModal({ state, initialSelected, submitLabel, onSubmit, onClos
                       <div className={`status-dot ${p.status === 'Playing' ? 'playing' : 'waiting'}`} />
                       <span className={`skill-badge skill-${p.skill}${p.gender === 'F' ? ' w' : ''}`}>{p.skill}</span>
                       {p.name}
+                      <span className="power-num">{power(p)}</span>
                     </div>
                   )
                 }
@@ -1251,6 +1372,20 @@ function AddToQueueModal({ state, initialSelected, submitLabel, onSubmit, onClos
                 <span style={{ color: 'var(--teal)' }}>
                   Tim 2: {selected.slice(2,4).map(id => state.players.find(p => p.id === id)?.name ?? '?').join(' · ')}
                 </span>
+              )}
+            </div>
+          )}
+
+          {picked && (
+            <div className="pick-meter">
+              <WinBar p1={teamP1(picked, power)} powers={[
+                Math.round((power(picked[0]) + power(picked[1])) / 2),
+                Math.round((power(picked[2]) + power(picked[3])) / 2),
+              ]} />
+              {best && best.four[1].id !== selected[1] && (
+                <button className="btn btn-ghost btn-sm" onClick={applyBest}>
+                  Atur pasangan terbaik ({Math.round(best.p1 * 100)}% – {100 - Math.round(best.p1 * 100)}%)
+                </button>
               )}
             </div>
           )}

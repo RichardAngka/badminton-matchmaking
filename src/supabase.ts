@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import type { AppState, TournamentState } from './types'
+import type { AppState, Match, Player, TournamentState } from './types'
 import type { MemberLists } from './members'
 
 const url = import.meta.env.VITE_SUPABASE_URL as string
@@ -52,6 +52,23 @@ export async function listRemoteSessions(): Promise<SessionMeta[]> {
     total_shuttles: (row.state?.matches ?? []).reduce(
       (s: number, m: { shuttlesUsed?: number }) => s + (m.shuttlesUsed ?? 0), 0
     ),
+  }))
+}
+
+export interface HistorySession { session_date: string; players: Player[]; matches: Match[] }
+
+/** Every session's players and matches, oldest first — what the Elo replay reads. */
+export async function fetchHistory(): Promise<HistorySession[]> {
+  if (!supabase) return []
+  const { data, error } = await supabase
+    .from('sessions')
+    .select('session_date, players:state->players, matches:state->matches')
+    .order('session_date')
+  if (error) throw new Error(error.message)
+  return (data ?? []).map(r => ({
+    session_date: r.session_date as string,
+    players: (r.players ?? []) as unknown as Player[],
+    matches: (r.matches ?? []) as unknown as Match[],
   }))
 }
 

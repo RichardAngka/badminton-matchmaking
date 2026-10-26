@@ -2399,3 +2399,46 @@ label.ip-preview:hover .ip-shot-hint, label.ip-preview:focus-within .ip-shot-hin
   .me-row { grid-template-columns: minmax(0, 1fr) 62px 90px 30px; }
   .me-row .skill-badge { display: none; }
 }
+
+/* ── Power & recommendations ───────────────────────────────────────────────
+   Team 1 is gold and team 2 steel wherever a pairing is picked, so the bar
+   reads without a legend: gold pulls left, steel right, the notch is even. */
+.power-num { margin-left: auto; font-size: 12px; color: var(--dim); }
+
+.winbar { display: flex; align-items: center; gap: 10px; }
+.winbar-side { display: flex; flex-direction: column; line-height: 1; min-width: 40px; }
+.winbar-side.t2 { align-items: flex-end; }
+.winbar-pct { font-family: var(--display); font-size: 22px; }
+.winbar-side.t1 .winbar-pct { color: var(--gold); }
+.winbar-side.t2 .winbar-pct { color: var(--teal); }
+.winbar-power { margin-top: 3px; font-size: 11px; color: var(--dim); }
+.winbar-track { position: relative; flex: 1; height: 4px; border-radius: 2px; background: var(--teal-dim); }
+.winbar-fill  { position: absolute; inset: 0 auto 0 0; border-radius: 2px 0 0 2px; background: var(--gold); }
+.winbar-track::after {
+  content: ''; position: absolute; left: 50%; top: -4px; bottom: -4px;
+  width: 1px; background: var(--text); opacity: .55;
+}
+.winbar.compact { gap: 8px; margin-top: 2px; }
+.winbar.compact .winbar-side { min-width: 30px; }
+.winbar.compact .winbar-pct { font-size: 15px; }
+
+/* A ranking, so the numbers are real: 1 is the fairest, the last is the worst. */
+.rec-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.rec-card {
+  width: 100%; display: flex; align-items: flex-start; gap: 12px;
+  padding: 12px 14px; text-align: left; font: inherit; color: inherit; cursor: pointer;
+  background: var(--card-lo); border: 1px solid var(--border); border-radius: var(--radius);
+  transition: border-color .15s, background .15s;
+}
+.rec-card:hover { background: var(--card); border-color: var(--teal-dim); }
+.rec-card.best { border-color: var(--gold-dim); }
+.rec-card:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.rec-rank { min-width: 16px; font-family: var(--display); font-size: 30px; line-height: 1; color: var(--dim); }
+.rec-card.best .rec-rank { color: var(--gold); }
+.rec-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 9px; }
+.rec-tags { display: flex; gap: 6px; }
+.rec-tag { padding: 1px 8px; font-size: 11.5px; color: var(--muted); border: 1px solid var(--border-s); border-radius: 999px; }
+.rec-tag.best { color: var(--gold); border-color: var(--gold-dim); background: var(--gold-bg); }
+.rec-tag.lop  { color: var(--red); border-color: rgba(244,96,108,.45); }
+.rec-empty { font-size: 13px; color: var(--muted); line-height: 1.6; }
+.pick-meter { display: flex; flex-direction: column; gap: 8px; }
